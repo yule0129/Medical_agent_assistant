@@ -1,0 +1,60 @@
+# Environment variables and local secrets
+.env
+.env.*
+!.env.example
+
+# Python virtual environments
+.venv/
+venv/
+env/
+
+# Python cache and build artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+build/
+dist/
+*.egg-info/
+
+# Local databases and database dumps
+*.db
+*.sqlite
+*.sqlite3
+*.sql
+*.dump
+*.backup
+
+# Logs and runtime files
+*.log
+logs/
+tmp/
+temp/
+
+# IDE and editor settings
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS-generated files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Frontend dependencies and build output
+node_modules/
+.parcel-cache/
+.vite/
+coverage/
+
+# Local uploads and sensitive medical data
+uploads/
+audio/
+recordings/
+patient_data/
+private_data/

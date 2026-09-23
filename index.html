@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>医助 · 医生工作台</title>
+  <style>
+    :root { --navy:#102a43; --blue:#1677ff; --ink:#1f2937; --muted:#718096; --line:#e8edf3; --bg:#f5f7fa; --green:#13a36b; --orange:#e98a15; }
+    * { box-sizing:border-box; }
+    body { margin:0; font-family:"Microsoft YaHei", Inter, system-ui, sans-serif; color:var(--ink); background:var(--bg); }
+    button, input, textarea { font:inherit; }
+    button { cursor:pointer; }
+    .app { min-height:100vh; display:grid; grid-template-columns:236px 1fr; }
+    .sidebar { background:var(--navy); color:#dce8f5; padding:22px 14px; display:flex; flex-direction:column; }
+    .brand { display:flex; align-items:center; gap:11px; padding:0 12px 28px; color:#fff; font-weight:700; font-size:20px; letter-spacing:.5px; }
+    .brand-mark { width:34px; height:34px; border-radius:10px; background:linear-gradient(135deg,#46a6ff,#1677ff); display:grid; place-items:center; font-size:20px; box-shadow:0 7px 16px #071d3455; }
+    .section-label { padding:10px 14px 7px; color:#88a2bb; font-size:11px; letter-spacing:1.5px; }
+    .nav-item { border:0; width:100%; color:#c9d7e5; background:transparent; text-align:left; padding:12px 14px; border-radius:9px; display:flex; align-items:center; gap:11px; margin:3px 0; font-size:14px; }
+    .nav-item:hover, .nav-item.active { color:#fff; background:#214564; }
+    .nav-item.active { box-shadow:inset 3px 0 #5cb4ff; }
+    .nav-icon { width:20px; text-align:center; font-size:16px; }
+    .sidebar-bottom { margin-top:auto; padding:13px 12px; border-top:1px solid #ffffff19; font-size:12px; color:#8fa5b9; line-height:1.7; }
+    .main { min-width:0; }
+    .topbar { height:72px; background:#fff; border-bottom:1px solid var(--line); padding:0 30px; display:flex; align-items:center; justify-content:space-between; }
+    .top-title { font-size:17px; font-weight:700; }
+    .top-sub { color:var(--muted); font-size:12px; margin-top:4px; }
+    .profile { display:flex; align-items:center; gap:10px; }
+    .avatar { width:36px; height:36px; border-radius:50%; display:grid; place-items:center; color:#fff; background:#4b7bec; font-size:13px; font-weight:700; }
+    .profile-name { font-size:13px; font-weight:700; }
+    .profile-role { color:var(--muted); font-size:11px; margin-top:2px; }
+    .content { padding:27px 30px 36px; max-width:1500px; }
+    .page-heading { display:flex; justify-content:space-between; align-items:flex-end; margin-bottom:21px; }
+    h1 { font-size:25px; margin:0 0 7px; letter-spacing:-.5px; }
+    .date { color:var(--muted); font-size:13px; }
+    .primary { border:0; color:#fff; background:var(--blue); border-radius:7px; padding:10px 16px; font-weight:600; box-shadow:0 4px 10px #1677ff2b; }
+    .primary:hover { background:#095bcc; }
+    .stats { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:22px; }
+    .card { background:#fff; border:1px solid var(--line); border-radius:10px; box-shadow:0 2px 8px #102a4307; }
+    .stat { padding:17px 19px; display:flex; align-items:center; justify-content:space-between; }
+    .stat-label { color:var(--muted); font-size:12px; margin-bottom:8px; }
+    .stat-number { font-size:26px; font-weight:700; color:var(--navy); }
+    .stat-note { color:var(--green); font-size:11px; margin-left:7px; }
+    .stat-icon { width:40px; height:40px; border-radius:10px; display:grid; place-items:center; font-size:19px; }
+    .blue-bg { background:#eaf3ff; color:#1677ff; } .green-bg { background:#e8f8f1; color:#13a36b; } .orange-bg { background:#fff3e2; color:#e98a15; } .purple-bg { background:#f2edff; color:#7a5af8; }
+    .grid { display:grid; grid-template-columns:minmax(520px,1.2fr) minmax(350px,.8fr); gap:20px; align-items:start; }
+    .card-head { padding:17px 20px; border-bottom:1px solid var(--line); display:flex; align-items:center; justify-content:space-between; }
+    .card-title { font-weight:700; font-size:15px; }
+    .link { border:0; background:none; color:var(--blue); font-size:12px; }
+    .patients { padding:0 20px 8px; }
+    .toolbar { padding:14px 0 12px; display:flex; gap:10px; }
+    .search { position:relative; flex:1; }
+    .search input { width:100%; border:1px solid #dfe6ee; padding:9px 12px 9px 32px; border-radius:7px; outline:none; background:#fbfcfd; font-size:12px; }
+    .search input:focus { border-color:#84b9ff; box-shadow:0 0 0 3px #1677ff13; }
+    .search span { position:absolute; left:11px; top:8px; color:#9aabba; }
+    select { border:1px solid #dfe6ee; color:#526274; border-radius:7px; padding:8px 11px; background:#fff; font-size:12px; }
+    table { width:100%; border-collapse:collapse; font-size:12px; }
+    th { text-align:left; color:#8b99a8; font-weight:500; padding:10px 7px; border-bottom:1px solid var(--line); }
+    td { padding:13px 7px; border-bottom:1px solid #f0f2f5; vertical-align:middle; }
+    tbody tr { cursor:pointer; transition:.15s; } tbody tr:hover, tbody tr.selected { background:#f2f7ff; }
+    .patient-cell { display:flex; gap:9px; align-items:center; }
+    .patient-avatar { width:30px; height:30px; border-radius:8px; background:#e7f0ff; color:#3970cc; display:grid; place-items:center; font-size:12px; font-weight:700; }
+    .patient-name { font-weight:700; color:#293b50; } .patient-id { color:#98a5b2; font-size:10px; margin-top:3px; }
+    .tag { border-radius:12px; padding:3px 8px; font-size:10px; display:inline-block; white-space:nowrap; } .tag.green { color:#0d8b5a; background:#e8f8f1; } .tag.orange { color:#b96a05; background:#fff2de; } .tag.blue { color:#2267bf; background:#eaf3ff; }
+    .side-stack { display:grid; gap:20px; }
+    .timeline { padding:17px 20px 20px; }
+    .timeline-item { display:flex; gap:12px; position:relative; padding-bottom:18px; }
+    .timeline-item:last-child { padding-bottom:0; } .timeline-item:not(:last-child):before { content:""; position:absolute; left:6px; top:17px; bottom:0; width:1px; background:#dfe7ef; }
+    .dot { width:13px; height:13px; border-radius:50%; margin-top:3px; border:3px solid #d9ebff; background:#1677ff; z-index:1; flex:none; }
+    .timeline-time { color:#9aa8b6; font-size:10px; margin-bottom:4px; } .timeline-text { font-size:12px; line-height:1.6; } .timeline-text strong { color:#263e58; }
+    .alert { margin:0 20px 17px; border-radius:8px; padding:12px 13px; background:#fff8ea; border:1px solid #fde7bd; display:flex; gap:10px; font-size:12px; line-height:1.6; color:#825f27; cursor:pointer; }
+    .alert:hover { box-shadow:0 3px 10px #102a4312; transform:translateY(-1px); }
+    .alert b { color:#b26e03; }
+    .quick-actions { display:grid; grid-template-columns:repeat(2,1fr); gap:10px; padding:17px 20px 20px; }
+    .quick { border:1px solid var(--line); background:#fbfcfd; border-radius:8px; text-align:left; padding:12px; color:#45566a; font-size:12px; }
+    .quick:hover { border-color:#9dc7ff; background:#f4f8ff; } .quick-icon { color:var(--blue); font-size:18px; display:block; margin-bottom:7px; }
+    .modal { display:none; position:fixed; inset:0; background:#081b2b80; z-index:10; align-items:center; justify-content:center; padding:20px; }
+    .modal.show { display:flex; } .modal-box { width:min(850px,100%); max-height:90vh; overflow:auto; background:#fff; border-radius:12px; box-shadow:0 20px 70px #081b2b45; }
+    .modal-head { padding:19px 22px; border-bottom:1px solid var(--line); display:flex; align-items:center; justify-content:space-between; } .close { background:none; border:0; font-size:22px; color:#8b99a8; }
+    .modal-body { padding:20px 22px; } .patient-overview { display:flex; align-items:center; gap:13px; padding:13px; border-radius:8px; background:#f5f8fc; margin-bottom:17px; } .patient-overview .patient-avatar { width:42px; height:42px; font-size:15px; }
+    .record-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-bottom:16px; } .record-box { padding:12px; border:1px solid var(--line); border-radius:8px; } .record-box small { display:block; color:#9aa8b6; margin-bottom:7px; font-size:11px; } .record-box b { font-size:13px; }
+    textarea { width:100%; min-height:115px; border:1px solid #dfe6ee; border-radius:8px; padding:12px; resize:vertical; line-height:1.7; outline:none; } textarea:focus { border-color:#84b9ff; box-shadow:0 0 0 3px #1677ff13; }
+    .draft { margin-top:15px; padding:13px; border-radius:8px; border:1px solid #d9eaff; background:#f7fbff; line-height:1.8; font-size:13px; }
+    .modal-foot { padding:15px 22px; border-top:1px solid var(--line); display:flex; justify-content:flex-end; gap:10px; } .secondary { border:1px solid #d8e0e8; background:#fff; color:#526274; border-radius:7px; padding:9px 15px; }
+    .toast { position:fixed; right:25px; bottom:25px; background:#173b5e; color:#fff; border-radius:8px; padding:12px 17px; font-size:13px; box-shadow:0 8px 25px #102a4340; transform:translateY(20px); opacity:0; pointer-events:none; transition:.25s; } .toast.show { transform:none; opacity:1; }
+    .detail-list { display:grid; gap:10px; margin-top:14px; }
+    .detail-row { display:flex; justify-content:space-between; gap:16px; padding:11px 12px; border:1px solid var(--line); border-radius:8px; font-size:12px; }
+    .detail-row span:first-child { color:#8b99a8; } .detail-row span:last-child { font-weight:600; text-align:right; }
+    .profile-button { border:0; background:transparent; display:flex; align-items:center; gap:10px; padding:3px; border-radius:8px; text-align:left; }
+    .profile-button:hover { background:#f2f6fb; }
+    .context-bar { display:flex; align-items:center; gap:9px; margin-left:24px; }
+    .context-bar label { color:#8b99a8; font-size:11px; }
+    .context-bar select { min-width:125px; padding:7px 9px; font-size:11px; }
+    .top-left { display:flex; align-items:center; }
+    .patient-tabs { display:flex; gap:4px; border-bottom:1px solid var(--line); margin:0 -22px 16px; padding:0 22px; }
+    .patient-tab { border:0; background:transparent; padding:10px 12px; color:#718096; font-size:12px; border-bottom:2px solid transparent; }
+    .patient-tab.active { color:var(--blue); border-bottom-color:var(--blue); font-weight:700; }
+    .clinical-table { width:100%; border-collapse:collapse; font-size:12px; margin-top:12px; }
+    .clinical-table th,.clinical-table td { padding:10px 8px; border-bottom:1px solid var(--line); text-align:left; }
+    .clinical-table th { color:#8b99a8; font-weight:500; background:#fafbfd; }
+    .status-dot { display:inline-block; width:7px; height:7px; border-radius:50%; background:var(--green); margin-right:5px; }
+    .status-dot.warn { background:var(--orange); }
+    .section-note { color:#8b99a8; font-size:11px; margin:0 0 10px; }
+    .record-paper { border:1px solid #dfe6ee; border-radius:8px; background:#fff; padding:20px; box-shadow:inset 0 1px 0 #fff; }
+    .record-paper h3 { text-align:center; font-size:18px; margin:0 0 18px; color:#173b5e; }
+    .record-meta { display:grid; grid-template-columns:repeat(4,1fr); gap:8px 16px; padding-bottom:14px; border-bottom:1px solid var(--line); font-size:11px; }
+    .record-meta span { color:#8b99a8; display:block; margin-bottom:3px; }
+    .record-section { margin-top:16px; }
+    .record-section-title { font-size:12px; font-weight:700; color:#284b6c; margin-bottom:7px; }
+    .record-text { font-size:13px; line-height:1.9; color:#33475b; white-space:pre-wrap; }
+    .record-source { margin-top:14px; padding:10px 12px; background:#f7fafc; border-left:3px solid #6aaefc; color:#657789; font-size:11px; line-height:1.7; }
+    .record-sign { margin-top:18px; padding-top:12px; border-top:1px dashed #ccd6e0; display:flex; justify-content:flex-end; gap:25px; color:#627286; font-size:11px; }
+    .clickable-row:hover { background:#f2f7ff; }
+    @media (max-width: 1050px) { .app { grid-template-columns:72px 1fr; } .brand span, .section-label, .nav-item span:not(.nav-icon), .sidebar-bottom { display:none; } .brand { padding:0 5px 28px; justify-content:center; } .nav-item { justify-content:center; padding:12px 0; } .content { padding:22px; } }
+    @media (max-width: 760px) { .app { display:block; } .sidebar { display:none; } .topbar { padding:0 18px; } .content { padding:18px 14px; } .stats { grid-template-columns:repeat(2,1fr); } .grid { grid-template-columns:1fr; } .record-grid { grid-template-columns:1fr; } .top-title { font-size:15px; } }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand"><div class="brand-mark">✚</div><span>医助 · 医生工作台</span></div>
+      <div class="section-label">工作台</div>
+      <button class="nav-item active" onclick="switchNav(this,'工作概览')"><span class="nav-icon">▦</span><span>工作概览</span></button>
+      <button class="nav-item" onclick="switchNav(this,'我的患者')"><span class="nav-icon">♙</span><span>我的患者</span></button>
+      <button class="nav-item" onclick="switchNav(this,'病历文书')"><span class="nav-icon">▤</span><span>病历文书</span></button>
+      <button class="nav-item" onclick="switchNav(this,'查房记录')"><span class="nav-icon">◷</span><span>查房记录</span></button>
+      <div class="section-label">系统</div>
+      <button class="nav-item" onclick="switchNav(this,'个人设置')"><span class="nav-icon">⚙</span><span>个人设置</span></button>
+      <button class="nav-item" onclick="switchNav(this,'帮助中心')"><span class="nav-icon">?</span><span>帮助中心</span></button>
+      <div class="sidebar-bottom">模拟环境 v0.1.0<br/>仅用于产品原型演示</div>
+    </aside>
+    <main class="main">
+      <header class="topbar">
+        <div class="top-left"><div><div class="top-title">住院医生工作台</div><div class="top-sub">内科病区 · 今日查房工作概览</div></div><div class="context-bar"><label>当前病区</label><select onchange="showToast('已切换至'+this.value)"><option>呼吸内科一病区</option><option>呼吸内科二病区</option><option>全院病区</option></select><label>日期</label><select onchange="showToast('日期已切换为'+this.value)"><option>2026-09-23</option><option>2026-09-22</option><option>2026-09-21</option></select></div></div>
+        <button class="profile-button" onclick="openPanel('个人信息')"><div class="avatar">张</div><div><div class="profile-name">张医生</div><div class="profile-role">住院医师 · 呼吸内科</div></div><span style="color:#9aa8b6;margin-left:8px">⌄</span></button>
+      </header>
+      <section class="content">
+        <div class="page-heading"><div><h1>早上好，张医生</h1><div class="date">2026年9月23日 星期三 · 呼吸内科一病区 · 您今天有 5 位患者需要查房</div></div><button class="primary" onclick="openRound()">＋ 开始查房</button></div>
+        <div class="stats">
+          <button class="card stat" style="border:1px solid var(--line);text-align:left" onclick="viewAllPatients()"><div><div class="stat-label">我的患者</div><span class="stat-number">12</span><span class="stat-note">↑ 2 位</span></div><div class="stat-icon blue-bg">♙</div></button>
+          <button class="card stat" style="border:1px solid var(--line);text-align:left" onclick="openPanel('病历文书')"><div><div class="stat-label">待完成病程</div><span class="stat-number">5</span><span class="stat-note" style="color:var(--orange)">需今日完成</span></div><div class="stat-icon orange-bg">▤</div></button>
+          <button class="card stat" style="border:1px solid var(--line);text-align:left" onclick="openPanel('查房记录')"><div><div class="stat-label">已完成查房</div><span class="stat-number">7</span><span class="stat-note">58% 完成</span></div><div class="stat-icon green-bg">✓</div></button>
+          <button class="card stat" style="border:1px solid var(--line);text-align:left" onclick="openPanel('使用统计')"><div><div class="stat-label">本周节省书写时间</div><span class="stat-number">2.4</span><span class="stat-note">小时</span></div><div class="stat-icon purple-bg">◴</div></button>
+        </div>
+        <div class="grid">
+          <div class="card">
+            <div class="card-head"><div class="card-title">今日患者</div><button class="link" onclick="viewAllPatients()">查看全部 →</button></div>
+            <div class="patients"><div class="toolbar"><div class="search"><span>⌕</span><input id="search" placeholder="搜索姓名、住院号或床号" oninput="filterPatients()" /></div><select id="statusFilter" onchange="filterPatients()"><option value="">全部状态</option><option value="待查房">待查房</option><option value="已完成">已完成</option></select></div>
+              <table><thead><tr><th>患者</th><th>床号</th><th>主要诊断</th><th>状态</th><th></th></tr></thead><tbody id="patientRows"></tbody></table>
+            </div>
+          </div>
+          <div class="side-stack">
+            <div class="card"><div class="card-head"><div class="card-title">待处理提醒</div><span class="tag orange">3 条</span></div><div style="padding-top:16px"><div class="alert" onclick="openPatientDetail('李秀兰')"><span>⚠</span><div><b>李秀兰 · 08床</b><br/>今日病程记录尚未完成，请在查房后及时补充。</div></div><div class="alert" onclick="openPatientDetail('王建国')" style="background:#eef7ff;border-color:#d8ebff;color:#42688e"><span>ⓘ</span><div><b style="color:#2769a8">王建国 · 12床</b><br/>检验结果有新变化：血钾 3.2 mmol/L。</div></div></div></div>
+            <div class="card"><div class="card-head"><div class="card-title">最近动态</div><button class="link" onclick="openPanel('最近动态')">查看记录</button></div><div class="timeline"><div class="timeline-item"><div class="dot"></div><div><div class="timeline-time">09:42</div><div class="timeline-text"><strong>已完成</strong> 王建国的查房记录并签字</div></div></div><div class="timeline-item"><div class="dot" style="background:#13a36b;border-color:#dcf7eb"></div><div><div class="timeline-time">09:15</div><div class="timeline-text">系统生成了 <strong>2 份病程草稿</strong></div></div></div><div class="timeline-item"><div class="dot" style="background:#e98a15;border-color:#fff0d5"></div><div><div class="timeline-time">08:30</div><div class="timeline-text">护士站更新了今日生命体征</div></div></div></div></div>
+            <div class="card"><div class="card-head"><div class="card-title">快捷操作</div></div><div class="quick-actions"><button class="quick" onclick="openRound()"><span class="quick-icon">◉</span>开始查房记录</button><button class="quick" onclick="openPanel('新建病历文书')"><span class="quick-icon">▤</span>新建病历文书</button><button class="quick" onclick="openPanel('交班摘要')"><span class="quick-icon">✦</span>生成交班摘要</button><button class="quick" onclick="openPanel('系统通知')"><span class="quick-icon">♢</span>查看系统通知</button></div></div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+  <div class="modal" id="roundModal"><div class="modal-box"><div class="modal-head"><div><b style="font-size:16px">查房记录 · 生成病程草稿</b><div style="color:#91a0ae;font-size:11px;margin-top:5px">选择患者并记录本次查房情况</div></div><button class="close" onclick="closeRound()">×</button></div><div class="modal-body"><div class="patient-overview"><div class="patient-avatar">李</div><div><b id="modalPatient">李秀兰</b><div style="font-size:11px;color:#8493a1;margin-top:4px">08床 · 住院号 202609180028 · 社区获得性肺炎</div></div><span class="tag orange" style="margin-left:auto">待查房</span></div><div class="record-grid"><div class="record-box"><small>昨日体温</small><b>37.8 ℃</b></div><div class="record-box"><small>血氧饱和度</small><b>95%</b></div><div class="record-box"><small>白细胞计数</small><b>12.4 ×10⁹/L</b></div></div><label style="display:block;font-size:12px;font-weight:700;margin-bottom:8px">本次查房记录</label><textarea id="roundText">患者今日精神状态尚可，诉咳嗽较前减轻，无明显胸闷气促。夜间体温最高37.2℃。查体：双肺呼吸音稍粗，未闻及明显干湿性啰音。今日复查血常规，白细胞较昨日下降。</textarea><div class="draft" id="draft" style="display:none"><b style="color:#2465a8">✦ AI 病程记录草稿</b><p style="margin:8px 0 0">患者今日精神状态尚可，咳嗽较前减轻，无明显胸闷气促。夜间体温最高37.2℃。查体双肺呼吸音稍粗，未闻及明显干湿性啰音。复查血常规示白细胞较昨日下降，提示感染指标较前改善。建议继续观察体温及呼吸道症状变化。</p><div style="margin-top:9px;color:#9a6a1a;font-size:11px">ⓘ 以上内容由系统根据查房记录生成，请医生审核确认后使用。</div></div></div><div class="modal-foot"><button class="secondary" onclick="closeRound()">取消</button><button class="primary" id="generateBtn" onclick="generateDraft()">✦ 生成病程草稿</button></div></div></div>
+  <div class="modal" id="panelModal"><div class="modal-box"><div class="modal-head"><div><b id="panelTitle" style="font-size:16px">系统面板</b><div id="panelSub" style="color:#91a0ae;font-size:11px;margin-top:5px">模拟功能页面</div></div><button class="close" onclick="closePanel()">×</button></div><div class="modal-body" id="panelBody"></div><div class="modal-foot"><button class="secondary" onclick="closePanel()">关闭</button><button class="primary" id="panelAction" onclick="panelAction()">确认</button></div></div></div>
+  <div class="toast" id="toast"></div>
+  <script>
+    const patients = [
+      {name:'李秀兰', id:'202609180028', bed:'08床', diagnosis:'社区获得性肺炎', status:'待查房', tone:'orange'},
+      {name:'王建国', id:'202609160014', bed:'12床', diagnosis:'慢性阻塞性肺疾病', status:'已完成', tone:'green'},
+      {name:'陈明远', id:'202609190036', bed:'15床', diagnosis:'支气管哮喘', status:'待查房', tone:'orange'},
+      {name:'赵雅琴', id:'202609170021', bed:'18床', diagnosis:'肺部感染', status:'已完成', tone:'green'},
+      {name:'周海波', id:'202609200041', bed:'21床', diagnosis:'间质性肺疾病', status:'待查房', tone:'orange'}
+    ];
+    const medicalRecords = [
+      {id:'MR-20260923-001',patient:'李秀兰',bed:'08床',admission:'202609180028',type:'日常病程记录',time:'2026-09-23 09:35',status:'待审核',tone:'orange',author:'张医生',diagnosis:'社区获得性肺炎',content:'患者今日精神状态尚可，诉咳嗽较前减轻，无明显胸闷、气促。夜间体温最高37.2℃。查体：双肺呼吸音稍粗，未闻及明显干湿性啰音。今日复查血常规示白细胞计数12.4×10⁹/L，较昨日下降，C反应蛋白36mg/L，感染指标呈下降趋势。\n\n目前抗感染治疗有效，继续予头孢曲松抗感染及雾化吸入治疗，密切观察体温、呼吸道症状及血氧饱和度变化。'},
+      {id:'MR-20260923-002',patient:'陈明远',bed:'15床',admission:'202609190036',type:'日常病程记录',time:'2026-09-23 09:12',status:'待审核',tone:'orange',author:'张医生',diagnosis:'支气管哮喘',content:'患者昨夜仍有阵发性喘息，晨起后症状缓解，无发热，无明显胸痛。查体：双肺呼吸音粗，可闻及散在哮鸣音。血氧饱和度96%。\n\n继续予吸入性糖皮质激素及支气管舒张剂治疗，观察夜间喘息频率，必要时复查肺功能。'},
+      {id:'MR-20260922-006',patient:'王建国',bed:'12床',admission:'202609160014',type:'日常病程记录',time:'2026-09-22 16:20',status:'已签署',tone:'green',author:'张医生',diagnosis:'慢性阻塞性肺疾病',content:'患者咳嗽、咳痰较前减少，活动后气促有所缓解，无发热。查体：双肺呼吸音低，可闻及少量湿性啰音。今日血钾3.2mmol/L。\n\n继续当前抗感染、平喘及氧疗方案，予补钾处理，复查电解质，继续观察呼吸困难变化。'}
+    ];
+    const API_BASE = window.HEALTH_AGENT_API || 'http://127.0.0.1:8000/api';
+    let backendRecords = false;
+    function renderPatients(list=patients){ document.getElementById('patientRows').innerHTML=list.map((p,i)=>`<tr onclick="openPatientDetail('${p.name}')" class="${i===0?'selected':''}"><td><div class="patient-cell"><div class="patient-avatar">${p.name[0]}</div><div><div class="patient-name">${p.name}</div><div class="patient-id">${p.id}</div></div></div></td><td>${p.bed}</td><td>${p.diagnosis}</td><td><span class="tag ${p.tone}">${p.status}</span></td><td style="color:#a2afba;font-size:16px">›</td></tr>`).join(''); }
+    function filterPatients(){ const q=document.getElementById('search').value.trim(); const s=document.getElementById('statusFilter').value; renderPatients(patients.filter(p=>(p.name+p.id+p.bed+p.diagnosis).includes(q) && (!s || p.status===s))); }
+    function selectPatient(name){ document.getElementById('modalPatient').textContent=name; document.getElementById('roundModal').classList.add('show'); document.getElementById('draft').style.display='none'; const btn=document.getElementById('generateBtn'); btn.textContent='✦ 生成病程草稿'; btn.onclick=generateDraft; }
+    function openRound(){ selectPatient('李秀兰'); }
+    function closeRound(){ document.getElementById('roundModal').classList.remove('show'); }
+    function generateDraft(){ document.getElementById('draft').style.display='block'; document.getElementById('generateBtn').textContent='✓ 保存并提交审核'; document.getElementById('generateBtn').onclick=()=>{ closeRound(); showToast('病程记录草稿已保存，等待医生审核'); }; }
+    function openPatientDetail(name){ const p=patients.find(item=>item.name===name)||patients[0]; document.getElementById('panelTitle').textContent='患者详情 · '+p.name; document.getElementById('panelSub').textContent=p.bed+' · '+p.id+' · '+p.diagnosis; document.getElementById('panelBody').innerHTML='<div class="patient-overview"><div class="patient-avatar">'+p.name[0]+'</div><div><b>'+p.name+'</b><div style="font-size:11px;color:#8493a1;margin-top:4px">'+p.bed+' · 女 · 68岁 · 入院第4天</div></div><span class="tag '+p.tone+'" style="margin-left:auto">'+p.status+'</span></div><div class="patient-tabs"><button class="patient-tab active" onclick="showPatientTab(this,\'概览\',\''+p.name+'\')">概览</button><button class="patient-tab" onclick="showPatientTab(this,\'病历时间线\',\''+p.name+'\')">病历时间线</button><button class="patient-tab" onclick="showPatientTab(this,\'医嘱\',\''+p.name+'\')">医嘱</button><button class="patient-tab" onclick="showPatientTab(this,\'检验检查\',\''+p.name+'\')">检验检查</button></div><div id="patientTabContent"><div class="record-grid"><div class="record-box"><small>生命体征</small><b>体温 37.2℃</b><div style="font-size:10px;color:#8b99a8;margin-top:5px">血压 128/76 mmHg</div></div><div class="record-box"><small>血氧 / 心率</small><b>95% / 88次/分</b><div style="font-size:10px;color:#8b99a8;margin-top:5px">09:05 护士录入</div></div><div class="record-box"><small>过敏史</small><b style="color:var(--green)">未发现药物过敏</b><div style="font-size:10px;color:#8b99a8;margin-top:5px">已核对</div></div></div><div class="detail-list"><div class="detail-row"><span>入院诊断</span><span>'+p.diagnosis+'</span></div><div class="detail-row"><span>当前病情</span><span style="color:var(--green)">症状较前改善</span></div><div class="detail-row"><span>当前用药</span><span>头孢曲松 2g qd · 雾化吸入</span></div><div class="detail-row"><span>今日重点</span><span style="color:var(--orange)">完成日常病程记录</span></div></div></div>'; document.getElementById('panelAction').textContent='开始查房'; document.getElementById('panelAction').onclick=()=>{ closePanel(); selectPatient(p.name); }; document.getElementById('panelModal').classList.add('show'); }
+    function showPatientTab(button,tab,name){ document.querySelectorAll('.patient-tab').forEach(item=>item.classList.remove('active')); button.classList.add('active'); const el=document.getElementById('patientTabContent'); if(tab==='病历时间线'){ el.innerHTML='<p class="section-note">按时间倒序展示患者关键医疗事件</p><div class="timeline"><div class="timeline-item"><div class="dot"></div><div><div class="timeline-time">2026-09-23 09:05 · 护理记录</div><div class="timeline-text"><strong>生命体征已更新</strong><br/>体温37.2℃，血氧95%，患者主诉咳嗽较前减轻。</div></div></div><div class="timeline-item"><div class="dot" style="background:#13a36b;border-color:#dcf7eb"></div><div><div class="timeline-time">2026-09-22 16:20 · 医生记录</div><div class="timeline-text"><strong>日常病程记录</strong><br/>继续抗感染治疗，观察体温和呼吸道症状。</div></div></div><div class="timeline-item"><div class="dot" style="background:#e98a15;border-color:#fff0d5"></div><div><div class="timeline-time">2026-09-20 14:10 · 入院记录</div><div class="timeline-text"><strong>入院诊断</strong><br/>'+(patients.find(x=>x.name===name)||patients[0]).diagnosis+'。</div></div></div></div>'; } else if(tab==='医嘱'){ el.innerHTML='<p class="section-note">当前有效医嘱 · 最后同步 09:12</p><table class="clinical-table"><thead><tr><th>医嘱名称</th><th>剂量/频次</th><th>途径</th><th>状态</th></tr></thead><tbody><tr><td>头孢曲松</td><td>2 g · qd</td><td>静滴</td><td><span class="status-dot"></span>执行中</td></tr><tr><td>布地奈德混悬液</td><td>1 mg · bid</td><td>雾化</td><td><span class="status-dot"></span>执行中</td></tr><tr><td>吸氧</td><td>2 L/min · prn</td><td>鼻导管</td><td><span class="status-dot warn"></span>必要时</td></tr></tbody></table>'; } else if(tab==='检验检查'){ el.innerHTML='<p class="section-note">最近检验结果 · 结果时间 08:40</p><table class="clinical-table"><thead><tr><th>项目</th><th>结果</th><th>参考范围</th><th>趋势</th></tr></thead><tbody><tr><td>白细胞计数</td><td>12.4 ×10⁹/L</td><td>3.5–9.5</td><td style="color:var(--green)">↓ 较昨日下降</td></tr><tr><td>中性粒细胞%</td><td>78.2%</td><td>40–75</td><td>→ 基本稳定</td></tr><tr><td>C反应蛋白</td><td>36 mg/L</td><td>0–10</td><td style="color:var(--green)">↓ 较昨日下降</td></tr></tbody></table>'; } else { openPatientDetail(name); } }
+    function switchNav(button, label){ document.querySelectorAll('.nav-item').forEach(item=>item.classList.remove('active')); button.classList.add('active'); if(label==='工作概览'){ window.scrollTo({top:0,behavior:'smooth'}); return; } if(label==='我的患者'){ document.querySelector('.card-title').scrollIntoView({behavior:'smooth',block:'center'}); document.getElementById('search').focus(); return; } if(label==='查房记录'){ openRound(); return; } openPanel(label); }
+    function viewAllPatients(){ document.getElementById('search').value=''; renderPatients(patients); document.querySelector('.card-title').scrollIntoView({behavior:'smooth',block:'center'}); showToast('已展示全部负责患者'); }
+    function openPanel(title){ const data={
+      '病历文书':{sub:'病历文书管理 · 点击记录查看正文',body:renderRecordList(),action:'新建病历'},
+      '查房记录':{sub:'查房记录工作量',body:'<div class="detail-list"><div class="detail-row"><span>今日计划查房</span><span>5 位患者</span></div><div class="detail-row"><span>已完成</span><span style="color:var(--green)">3 位患者</span></div><div class="detail-row"><span>待完成</span><span style="color:var(--orange)">2 位患者</span></div></div><p class="section-note" style="margin-top:16px">点击“开始查房”进入患者查房记录流程。</p>',action:'开始查房'},
+      '使用统计':{sub:'智能病历辅助使用统计',body:'<div class="record-grid"><div class="record-box"><small>本周生成草稿</small><b>18 份</b></div><div class="record-box"><small>平均修改率</small><b>22%</b></div><div class="record-box"><small>累计节省时间</small><b>2.4 小时</b></div></div><div class="detail-list"><div class="detail-row"><span>草稿采纳率</span><span style="color:var(--green)">86%</span></div><div class="detail-row"><span>本周使用天数</span><span>4 天</span></div></div>',action:'关闭'},
+      '交班摘要':{sub:'根据今日患者信息生成摘要',body:'<div class="draft" style="display:block"><b style="color:#2465a8">✦ 今日交班摘要（模拟）</b><p style="margin:8px 0;line-height:1.8">当前病区共12位患者，其中3位患者需重点关注。李秀兰咳嗽症状较前改善；王建国血钾3.2 mmol/L，建议交班时重点提醒；陈明远今日仍有夜间喘息。</p></div>',action:'保存摘要'},
+      '系统通知':{sub:'通知中心',body:'<div class="detail-list"><div class="detail-row"><span>09:15</span><span>护士站已更新今日生命体征</span></div><div class="detail-row"><span>08:30</span><span>系统检测到2条待处理提醒</span></div><div class="detail-row"><span>昨天</span><span>病历模板已更新至2026版</span></div></div>',action:'标记已读'},
+      '最近动态':{sub:'操作与系统动态',body:'<div class="detail-list"><div class="detail-row"><span>09:42</span><span>王建国的查房记录已签字</span></div><div class="detail-row"><span>09:15</span><span>系统生成2份病程草稿</span></div><div class="detail-row"><span>08:30</span><span>护士站更新生命体征</span></div></div>',action:'导出记录'},
+      '个人设置':{sub:'医生账号设置',body:'<div class="detail-list"><div class="detail-row"><span>姓名</span><span>张医生</span></div><div class="detail-row"><span>科室</span><span>呼吸内科</span></div><div class="detail-row"><span>角色</span><span>住院医师</span></div><div class="detail-row"><span>通知方式</span><span>系统通知 · 已开启</span></div></div>',action:'保存设置'},
+      '个人信息':{sub:'当前登录账号',body:'<div class="patient-overview"><div class="avatar">张</div><div><b>张医生</b><div style="font-size:11px;color:#8493a1;margin-top:4px">住院医师 · 呼吸内科</div></div></div><div class="detail-list"><div class="detail-row"><span>账号</span><span>doctor001</span></div><div class="detail-row"><span>本次登录</span><span>2026-09-23 09:12</span></div></div>',action:'关闭'},
+      '帮助中心':{sub:'使用帮助',body:'<div class="detail-list"><div class="detail-row"><span>如何开始查房？</span><span>选择患者后点击开始查房</span></div><div class="detail-row"><span>AI草稿能直接上传吗？</span><span>不能，必须由医生审核签字</span></div><div class="detail-row"><span>数据说明</span><span>当前为模拟数据环境</span></div></div>',action:'我知道了'},
+      '新建病历文书':{sub:'选择文书类型',body:'<div class="detail-list"><div class="detail-row"><span>日常病程记录</span><span>适用于每日查房</span></div><div class="detail-row"><span>交班记录</span><span>适用于医生交接班</span></div><div class="detail-row"><span>出院小结</span><span>功能开发中</span></div></div>',action:'创建草稿'}
+    }; const item=data[title]||data['帮助中心']; document.getElementById('panelTitle').textContent=title; document.getElementById('panelSub').textContent=item.sub; document.getElementById('panelBody').innerHTML=item.body; document.getElementById('panelAction').textContent=item.action; document.getElementById('panelAction').onclick=()=>executePanelAction(title); document.getElementById('panelModal').classList.add('show'); }
+    function renderRecordList(){ return '<div class="toolbar" style="padding-top:0"><div class="search"><span>⌕</span><input placeholder="搜索患者、住院号或文书类型" oninput="filterRecordList(this.value)" /></div><select id="recordStatus" onchange="filterRecordList()"><option value="">全部状态</option><option value="待审核">待审核</option><option value="已签署">已签署</option></select></div><div id="recordListTable">'+recordTable(medicalRecords)+'</div>'; }
+    function recordTable(list){ return '<table class="clinical-table"><thead><tr><th>患者</th><th>住院号</th><th>文书类型</th><th>记录时间</th><th>状态</th></tr></thead><tbody>'+list.map(r=>'<tr class="clickable-row" onclick="openMedicalRecord(\''+r.id+'\')"><td><b>'+r.patient+'</b> · '+r.bed+'</td><td>'+ (r.admission_number || r.admission) +'</td><td>'+ (r.record_type || r.type) +'</td><td>'+r.time+'</td><td><span class="tag '+(r.status==='已签署'?'green':'orange')+'">'+r.status+'</span></td></tr>').join('')+'</tbody></table>'; }
+    function filterRecordList(value){ const input=value===undefined?'':value; const status=document.getElementById('recordStatus')?document.getElementById('recordStatus').value:''; const q=input||((document.querySelector('#panelBody .search input')||{}).value||''); document.getElementById('recordListTable').innerHTML=recordTable(medicalRecords.filter(r=>(r.patient+r.admission+r.type).includes(q)&&(!status||r.status===status))); }
+    function openMedicalRecord(id){ const r=medicalRecords.find(item=>String(item.id)===String(id)); if(!r)return; const type=r.record_type||r.type; const admission=r.admission_number||r.admission; document.getElementById('panelTitle').textContent=type+' · '+r.patient; document.getElementById('panelSub').textContent=(r.record_number||r.id)+' · '+r.status; document.getElementById('panelBody').innerHTML='<div class="record-paper"><h3>'+type+'</h3><div class="record-meta"><div><span>姓名</span><b>'+r.patient+'</b></div><div><span>床号</span><b>'+r.bed+'</b></div><div><span>住院号</span><b>'+admission+'</b></div><div><span>记录时间</span><b>'+r.time+'</b></div><div><span>科室</span><b>呼吸内科</b></div><div><span>主管医生</span><b>'+r.author+'</b></div><div><span>主要诊断</span><b>'+r.diagnosis+'</b></div><div><span>文书状态</span><b class="tag '+(r.status==='已签署'?'green':'orange')+'">'+r.status+'</b></div></div><div class="record-section"><div class="record-section-title">病程记录正文</div><div class="record-text" id="recordTextView">'+r.content+'</div><textarea id="recordEditor" style="display:none;min-height:230px">'+r.content+'</textarea></div><div class="record-source"><b>生成依据：</b>本次查房语音转写、今日生命体征、血常规与C反应蛋白结果、当前有效医嘱。AI生成内容须由医生审核后使用。</div><div class="record-sign"><span>记录医师：'+r.author+'</span><span>'+((r.status==='已签署')?'签名时间：'+r.time:'尚未电子签名')+'</span></div></div>'; document.getElementById('panelAction').textContent=r.status==='已签署'?'返回列表':'编辑病历'; document.getElementById('panelAction').onclick=()=>r.status==='已签署'?openRecordList():editMedicalRecord(r.id); }
+    function editMedicalRecord(id){ document.getElementById('recordTextView').style.display='none'; document.getElementById('recordEditor').style.display='block'; document.getElementById('panelAction').textContent='保存修改'; document.getElementById('panelAction').onclick=()=>saveMedicalRecord(id); }
+    async function saveMedicalRecord(id){ const r=medicalRecords.find(item=>String(item.id)===String(id)); const content=document.getElementById('recordEditor').value; if(backendRecords){ try { const response=await fetch(API_BASE+'/medical-records/'+id,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({content})}); if(!response.ok)throw new Error('save failed'); const fresh=await response.json(); Object.assign(r,fresh); } catch(error){ showToast('后端保存失败，请检查服务状态'); return; } } else { r.content=content; } document.getElementById('recordTextView').textContent=r.content; document.getElementById('recordTextView').style.display='block'; document.getElementById('recordEditor').style.display='none'; document.getElementById('panelAction').textContent='审核并签字'; document.getElementById('panelAction').onclick=()=>signMedicalRecord(id); showToast('病历修改已保存'); }
+    async function signMedicalRecord(id){ const r=medicalRecords.find(item=>String(item.id)===String(id)); if(backendRecords){ try { const response=await fetch(API_BASE+'/medical-records/'+id+'/sign',{method:'POST'}); if(!response.ok)throw new Error('sign failed'); const fresh=await response.json(); Object.assign(r,fresh); } catch(error){ showToast('签字失败，请检查后端服务'); return; } } else { r.status='已签署'; r.tone='green'; } showToast('电子签名完成，病历已归档'); openMedicalRecord(id); }
+    function openRecordList(){ document.getElementById('panelTitle').textContent='病历文书'; document.getElementById('panelSub').textContent='病历文书管理 · 点击记录查看正文'; document.getElementById('panelBody').innerHTML=renderRecordList(); document.getElementById('panelAction').textContent='新建病历'; document.getElementById('panelAction').onclick=()=>{closePanel();openRound();}; loadBackendRecords(); }
+    async function loadBackendRecords(){ try { const response=await fetch(API_BASE+'/medical-records'); if(!response.ok) return; const data=await response.json(); if(!Array.isArray(data)||!data.length)return; backendRecords=true; medicalRecords.splice(0,medicalRecords.length,...data); const table=document.getElementById('recordListTable'); if(table)table.innerHTML=recordTable(medicalRecords); } catch(error){ console.info('Backend unavailable, using local demo records.'); } }
+    function executePanelAction(title){ if(title==='病历文书'){ closePanel(); openRound(); return; } if(title==='查房记录'||title==='新建病历文书'){ closePanel(); openRound(); return; } closePanel(); showToast(title+'操作已完成（模拟）'); }
+    function closePanel(){ document.getElementById('panelModal').classList.remove('show'); }
+    function panelAction(){ closePanel(); }
+    function showToast(text){ const el=document.getElementById('toast'); el.textContent=text; el.classList.add('show'); setTimeout(()=>el.classList.remove('show'),2600); }
+    renderPatients();
+    document.getElementById('roundModal').addEventListener('click',e=>{if(e.target.id==='roundModal')closeRound()});
+    document.getElementById('panelModal').addEventListener('click',e=>{if(e.target.id==='panelModal')closePanel()});
+  </script>
+</body>
+</html>
