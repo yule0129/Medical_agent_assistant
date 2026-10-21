@@ -28,7 +28,13 @@ pip install -r backend/requirements.txt
 uvicorn backend.main:app --reload --port 8000
 ```
 
-首次启动会自动创建表。开发环境可以用下面的接口写入虚构演示数据：
+第一、第二层现在使用 Alembic 管理数据库结构。首次使用请先执行迁移：
+
+```powershell
+alembic upgrade head
+```
+
+开发环境可以用下面的接口写入虚构演示数据：
 
 ```powershell
 Invoke-RestMethod -Method Post http://127.0.0.1:8000/api/dev/seed
@@ -38,11 +44,11 @@ Invoke-RestMethod -Method Post http://127.0.0.1:8000/api/dev/seed
 
 ## 主要接口
 
-- `GET /api/health`
+- `GET /api/health`（包含真实数据库连通性检查）
 - `GET /api/medical-records`
 - `GET /api/medical-records/{id}`
 - `PATCH /api/medical-records/{id}`
 - `POST /api/medical-records/{id}/sign`
 - `POST /api/dev/seed`
 
-当前后端只使用虚构数据。接入真实医院系统前，需要增加统一身份认证、医生与患者权限校验、审计日志、加密和数据库迁移管理。
+当前后端只使用虚构数据。`/api/dev/seed` 可重复执行，不会重复插入固定演示数据，也不会删除已有数据。接入真实医院系统前，仍需要增加统一身份认证、医生与患者权限校验、加密和完整审计策略。
