@@ -1,5 +1,6 @@
 from datetime import datetime
 from enum import StrEnum
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -19,6 +20,7 @@ class LoopTransitionRequest(BaseModel):
 
     current: LoopStatus
     target: LoopStatus
+    intent_type: Literal["FOLLOW_RESULT", "RECHECK", "MONITOR", "ACTION"] = "FOLLOW_RESULT"
     has_evidence: bool = False
     clinician_confirmed: bool = False
     resolution_note: str | None = None

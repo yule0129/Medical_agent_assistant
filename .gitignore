@@ -48,6 +48,7 @@ Desktop.ini
 
 # Frontend dependencies and build output
 node_modules/
+.browser-test-profile/
 .parcel-cache/
 .vite/
 coverage/

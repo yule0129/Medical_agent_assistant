@@ -88,6 +88,7 @@ class MedicalRecord(Base):
     patient_id: Mapped[int] = mapped_column(ForeignKey("patients.id"), index=True)
     doctor_id: Mapped[int | None] = mapped_column(ForeignKey("doctors.id"), nullable=True)
     encounter_id: Mapped[int | None] = mapped_column(ForeignKey("encounters.id"), nullable=True, index=True)
+    source_rounding_session_id: Mapped[int | None] = mapped_column(ForeignKey("rounding_sessions.id"), nullable=True)
     record_type: Mapped[str] = mapped_column(String(80), default="日常病程记录")
     content: Mapped[str] = mapped_column(Text)
     status: Mapped[str] = mapped_column(String(20), default="待审核")
@@ -101,6 +102,7 @@ class RoundingSession(Base):
     __tablename__ = "rounding_sessions"
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    request_key: Mapped[str | None] = mapped_column(String(100), nullable=True, unique=True)
     encounter_id: Mapped[int] = mapped_column(ForeignKey("encounters.id"), index=True)
     doctor_id: Mapped[int] = mapped_column(ForeignKey("doctors.id"), index=True)
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
@@ -108,6 +110,8 @@ class RoundingSession(Base):
     transcript: Mapped[str] = mapped_column(Text, default="")
     generated_note: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(String(30), default="DRAFT")
+    audio_filename: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    transcript_source: Mapped[str] = mapped_column(String(30), default="manual")
 
 
 class ClinicalEvent(Base):
@@ -145,6 +149,7 @@ class ClinicalIntent(Base):
     encounter_id: Mapped[int] = mapped_column(ForeignKey("encounters.id"), index=True)
     source_event_id: Mapped[int | None] = mapped_column(ForeignKey("clinical_events.id"), nullable=True)
     raw_text: Mapped[str] = mapped_column(Text)
+    target: Mapped[str | None] = mapped_column(String(120), nullable=True)
     intent_type: Mapped[str] = mapped_column(String(60))
     status: Mapped[str] = mapped_column(String(30), default="CANDIDATE")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
