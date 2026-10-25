@@ -1,62 +1,26 @@
 from __future__ import annotations
 
-import os
-from datetime import datetime
-from typing import Generator, Optional
+from datetime import datetime, timezone, timedelta
+from typing import Optional
 
-from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, ConfigDict
-from sqlalchemy import DateTime, ForeignKey, String, Text, create_engine, select
-from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, relationship, sessionmaker
+from sqlalchemy import select, func
+from sqlalchemy.orm import Session
 
-load_dotenv()
-
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+psycopg://postgres:postgres@localhost:5432/health_agent")
-engine = create_engine(DATABASE_URL, pool_pre_ping=True)
-SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
-
-
-class Base(DeclarativeBase):
-    pass
-
-
-class Doctor(Base):
-    __tablename__ = "doctors"
-    id: Mapped[int] = mapped_column(primary_key=True)
-    username: Mapped[str] = mapped_column(String(80), unique=True, index=True)
-    name: Mapped[str] = mapped_column(String(80))
-    department: Mapped[str] = mapped_column(String(120))
-    patients: Mapped[list[Patient]] = relationship(back_populates="doctor")
-
-
-class Patient(Base):
-    __tablename__ = "patients"
-    id: Mapped[int] = mapped_column(primary_key=True)
-    name: Mapped[str] = mapped_column(String(80))
-    admission_number: Mapped[str] = mapped_column(String(40), unique=True, index=True)
-    bed_number: Mapped[str] = mapped_column(String(20))
-    gender: Mapped[str] = mapped_column(String(10), default="未记录")
-    age: Mapped[int] = mapped_column(default=0)
-    diagnosis: Mapped[str] = mapped_column(String(255))
-    doctor_id: Mapped[Optional[int]] = mapped_column(ForeignKey("doctors.id"))
-    doctor: Mapped[Optional[Doctor]] = relationship(back_populates="patients")
-    records: Mapped[list[MedicalRecord]] = relationship(back_populates="patient", cascade="all, delete-orphan")
-
-
-class MedicalRecord(Base):
-    __tablename__ = "medical_records"
-    id: Mapped[int] = mapped_column(primary_key=True)
-    record_number: Mapped[str] = mapped_column(String(60), unique=True, index=True)
-    patient_id: Mapped[int] = mapped_column(ForeignKey("patients.id"), index=True)
-    doctor_id: Mapped[Optional[int]] = mapped_column(ForeignKey("doctors.id"))
-    record_type: Mapped[str] = mapped_column(String(80), default="日常病程记录")
-    content: Mapped[str] = mapped_column(Text)
-    status: Mapped[str] = mapped_column(String(20), default="待审核")
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    signed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
-    patient: Mapped[Patient] = relationship(back_populates="records")
+from .config import settings
+from .db import Base, check_database, engine, get_db
+from .models import Doctor, Encounter, MedicalRecord, Patient, RoundingSession
+from .routes.events import router as events_router
+from .routes.intents import router as intents_router
+from .routes.workflow import router as workflow_router
+from .routes.rounding import router as rounding_router
+from .routes.records import router as records_router
+from .routes.timeline import router as timeline_router
+from .routes.tasks import router as tasks_router
+from .services.intent_service import require_scope
+from .services.rounding_service import rounding_summary
 
 
 class RecordOut(BaseModel):
@@ -72,23 +36,36 @@ class RecordOut(BaseModel):
     author: str
     diagnosis: str
     content: str
+    encounter_id: int | None = None
+    source_rounding_session_id: int | None = None
+    patient_id: int
+    encounter_number: str | None = None
+    created_at: str
+    signed_at: str | None = None
 
 
 class RecordUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     content: str
 
 
-def get_db() -> Generator[Session, None, None]:
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+def utc_now() -> datetime:
+    return datetime.now(timezone.utc)
 
 
 def to_record(record: MedicalRecord, db: Session) -> RecordOut:
     patient = db.get(Patient, record.patient_id)
     doctor = db.get(Doctor, record.doctor_id) if record.doctor_id else None
+    encounter = db.get(Encounter, record.encounter_id) if record.encounter_id else None
+    source_id = record.source_rounding_session_id
+    if source_id is None and record.record_number.startswith("ROUND-"):
+        suffix = record.record_number.removeprefix("ROUND-")
+        source = db.get(RoundingSession, int(suffix)) if suffix.isdigit() else None
+        if source and source.encounter_id == record.encounter_id:
+            source_id = source.id
+    created_at = record.created_at
+    if created_at.tzinfo is None:
+        created_at = created_at.replace(tzinfo=timezone.utc)
     return RecordOut(
         id=record.id,
         record_number=record.record_number,
@@ -96,42 +73,116 @@ def to_record(record: MedicalRecord, db: Session) -> RecordOut:
         bed=patient.bed_number,
         admission_number=patient.admission_number,
         record_type=record.record_type,
-        time=record.created_at.strftime("%Y-%m-%d %H:%M"),
+        time=created_at.astimezone(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M"),
         status=record.status,
         author=doctor.name if doctor else "未指定",
-        diagnosis=patient.diagnosis,
+        diagnosis=encounter.diagnosis_snapshot if encounter and encounter.diagnosis_snapshot else patient.diagnosis,
         content=record.content,
+        encounter_id=record.encounter_id,
+        source_rounding_session_id=source_id,
+        patient_id=record.patient_id,
+        encounter_number=encounter.encounter_number if encounter else None,
+        created_at=created_at.isoformat(),
+        signed_at=record.signed_at.isoformat() if record.signed_at else None,
     )
 
 
-app = FastAPI(title="Health Agent API", version="0.1.0")
+app = FastAPI(title="Health Agent API", version="0.2.0")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[origin.strip() for origin in os.getenv("CORS_ORIGINS", "*").split(",")],
+    allow_origins=list(settings.cors_origins),
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.include_router(events_router)
+app.include_router(intents_router)
+app.include_router(workflow_router)
+app.include_router(rounding_router)
+app.include_router(records_router)
+app.include_router(timeline_router)
+app.include_router(tasks_router)
 
 
 @app.on_event("startup")
 def startup() -> None:
-    Base.metadata.create_all(bind=engine)
+    if settings.auto_create_tables:
+        Base.metadata.create_all(bind=engine)
 
 
 @app.get("/api/health")
-def health() -> dict[str, str]:
-    return {"status": "ok", "database": "postgresql"}
+def health() -> dict[str, str | bool]:
+    database_ok = check_database()
+    return {"status": "ok" if database_ok else "degraded", "database": "postgresql", "database_ready": database_ok}
 
 
 @app.get("/api/medical-records", response_model=list[RecordOut])
-def list_records(status: Optional[str] = None, q: Optional[str] = None, db: Session = Depends(get_db)):
-    records = db.scalars(select(MedicalRecord).order_by(MedicalRecord.created_at.desc())).all()
+def list_records(status: Optional[str] = None, q: Optional[str] = None, patient_id: int | None = None, encounter_id: int | None = None, db: Session = Depends(get_db)):
+    query = select(MedicalRecord).order_by(MedicalRecord.created_at.desc(), MedicalRecord.id.desc())
+    if patient_id is not None:
+        query = query.where(MedicalRecord.patient_id == patient_id)
+    if encounter_id is not None:
+        query = query.where(MedicalRecord.encounter_id == encounter_id)
+    records = db.scalars(query).all()
     result = [to_record(record, db) for record in records]
     if status:
         result = [record for record in result if record.status == status]
     if q:
         result = [record for record in result if q in f"{record.patient}{record.admission_number}{record.record_type}"]
+    return result
+
+
+@app.get("/api/patients/{patient_id}/history")
+def patient_history(patient_id: int, encounter_id: int | None = None, doctor_id: int = 1, db: Session = Depends(get_db)):
+    patient = db.get(Patient, patient_id)
+    if patient is None:
+        raise HTTPException(404, "患者不存在")
+    encounters = db.scalars(select(Encounter).where(Encounter.patient_id == patient_id).order_by(Encounter.admitted_at.desc(), Encounter.id.desc())).all()
+    accessible = []
+    for encounter in encounters:
+        try:
+            require_scope(db, encounter.id, doctor_id)
+            accessible.append(encounter)
+        except ValueError:
+            continue
+    if patient.doctor_id != doctor_id and not accessible:
+        raise HTTPException(403, "doctor is outside patient scope")
+    accessible_ids = {row.id for row in accessible}
+    if encounter_id is not None and encounter_id not in accessible_ids:
+        raise HTTPException(404, "该患者的可访问住院记录不存在")
+    record_query = select(MedicalRecord).where(MedicalRecord.patient_id == patient_id).order_by(MedicalRecord.created_at.desc(), MedicalRecord.id.desc())
+    if encounter_id is not None:
+        record_query = record_query.where(MedicalRecord.encounter_id == encounter_id)
+    records = [row for row in db.scalars(record_query) if row.encounter_id in accessible_ids or (row.encounter_id is None and patient.doctor_id == doctor_id)]
+    selected_ids = [encounter_id] if encounter_id is not None else list(accessible_ids)
+    roundings = db.scalars(select(RoundingSession).where(RoundingSession.encounter_id.in_(selected_ids)).order_by(RoundingSession.started_at.desc(), RoundingSession.id.desc())).all() if selected_ids else []
+    numbers = {row.id: row.encounter_number for row in accessible}
+    return {
+        "patient": {"id": patient.id, "name": patient.name, "bed": patient.bed_number, "diagnosis": patient.diagnosis},
+        "encounters": [{"id": row.id, "encounter_number": row.encounter_number, "admitted_at": row.admitted_at.isoformat(), "status": row.status} for row in accessible],
+        "records": [{**to_record(row, db).model_dump(exclude={"content"}), "preview": row.content[:160]} for row in records],
+        "roundings": [{**rounding_summary(db, row), "encounter_number": numbers[row.encounter_id]} for row in roundings],
+    }
+
+
+@app.get("/api/patients")
+def list_patients(doctor_id: int = 1, db: Session = Depends(get_db)):
+    patients = db.scalars(select(Patient).order_by(Patient.id)).all()
+    result = []
+    for patient in patients:
+        encounter = db.scalar(select(Encounter).where(Encounter.patient_id == patient.id, Encounter.status == "INPATIENT").order_by(Encounter.admitted_at.desc()))
+        if patient.doctor_id != doctor_id and (encounter is None or encounter.attending_doctor_id != doctor_id):
+            continue
+        latest = db.scalar(select(RoundingSession).where(RoundingSession.encounter_id == encounter.id).order_by(RoundingSession.started_at.desc(), RoundingSession.id.desc())) if encounter else None
+        local_tz = timezone(timedelta(hours=8))
+        started = latest.started_at.replace(tzinfo=timezone.utc) if latest and latest.started_at.tzinfo is None else latest.started_at if latest else None
+        today = bool(started and started.astimezone(local_tz).date() == utc_now().astimezone(local_tz).date())
+        rounding_status = ("已完成" if latest.status == "COMPLETED" else "待结束") if today else "待查房"
+        day_start = utc_now().astimezone(local_tz).replace(hour=0, minute=0, second=0, microsecond=0).astimezone(timezone.utc)
+        today_query = select(func.count()).select_from(RoundingSession).where(RoundingSession.encounter_id == encounter.id, RoundingSession.started_at >= day_start, RoundingSession.started_at < day_start + timedelta(days=1)) if encounter else None
+        today_count = db.scalar(today_query) if today_query is not None else 0
+        completed_count = db.scalar(today_query.where(RoundingSession.status == "COMPLETED")) if today_query is not None else 0
+        result.append({"id": patient.id, "name": patient.name, "admission_number": patient.admission_number, "bed": patient.bed_number, "diagnosis": patient.diagnosis, "gender": patient.gender, "age": patient.age, "encounter_id": encounter.id if encounter else None, "encounter_number": encounter.encounter_number if encounter else None, "rounding_status": rounding_status, "latest_rounding_id": latest.id if latest else None, "today_rounding_count": today_count, "today_completed_rounding_count": completed_count})
     return result
 
 
@@ -162,7 +213,7 @@ def sign_record(record_id: int, db: Session = Depends(get_db)):
     if not record:
         raise HTTPException(status_code=404, detail="medical record not found")
     record.status = "已签署"
-    record.signed_at = datetime.utcnow()
+    record.signed_at = utc_now()
     db.commit()
     db.refresh(record)
     return to_record(record, db)
@@ -170,23 +221,5 @@ def sign_record(record_id: int, db: Session = Depends(get_db)):
 
 @app.post("/api/dev/seed")
 def seed_demo_data(db: Session = Depends(get_db)):
-    """Development-only seed endpoint. Use only with synthetic/demo data."""
-    if db.scalar(select(Doctor).where(Doctor.username == "doctor001")):
-        return {"message": "demo data already exists"}
-    doctor = Doctor(username="doctor001", name="张医生", department="呼吸内科")
-    db.add(doctor)
-    db.flush()
-    patients = [
-        Patient(name="李秀兰", admission_number="202609180028", bed_number="08床", gender="女", age=68, diagnosis="社区获得性肺炎", doctor_id=doctor.id),
-        Patient(name="陈明远", admission_number="202609190036", bed_number="15床", gender="男", age=52, diagnosis="支气管哮喘", doctor_id=doctor.id),
-        Patient(name="王建国", admission_number="202609160014", bed_number="12床", gender="男", age=71, diagnosis="慢性阻塞性肺疾病", doctor_id=doctor.id),
-    ]
-    db.add_all(patients)
-    db.flush()
-    db.add_all([
-        MedicalRecord(record_number="MR-20260923-001", patient_id=patients[0].id, doctor_id=doctor.id, content="患者今日精神状态尚可，诉咳嗽较前减轻，无明显胸闷、气促。夜间体温最高37.2℃。查体：双肺呼吸音稍粗，未闻及明显干湿性啰音。今日复查血常规示白细胞计数12.4×10⁹/L，较昨日下降，C反应蛋白36mg/L，感染指标呈下降趋势。\n\n目前抗感染治疗有效，继续予头孢曲松抗感染及雾化吸入治疗，密切观察体温、呼吸道症状及血氧饱和度变化。"),
-        MedicalRecord(record_number="MR-20260923-002", patient_id=patients[1].id, doctor_id=doctor.id, content="患者昨夜仍有阵发性喘息，晨起后症状缓解，无发热，无明显胸痛。查体：双肺呼吸音粗，可闻及散在哮鸣音。血氧饱和度96%。\n\n继续予吸入性糖皮质激素及支气管舒张剂治疗，观察夜间喘息频率，必要时复查肺功能。"),
-        MedicalRecord(record_number="MR-20260922-006", patient_id=patients[2].id, doctor_id=doctor.id, status="已签署", signed_at=datetime.utcnow(), content="患者咳嗽、咳痰较前减少，活动后气促有所缓解，无发热。查体：双肺呼吸音低，可闻及少量湿性啰音。今日血钾3.2mmol/L。\n\n继续当前抗感染、平喘及氧疗方案，予补钾处理，复查电解质，继续观察呼吸困难变化。"),
-    ])
-    db.commit()
-    return {"message": "demo data seeded", "patients": 3, "records": 3}
+    from .seed import seed_demo
+    return seed_demo(db)
