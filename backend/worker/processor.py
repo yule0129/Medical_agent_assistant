@@ -19,7 +19,14 @@ def process_job(db: Session, job: EventJob) -> dict[str, object]:
     job.attempt += 1
     job.status = JobStatus.LEASED
     job.lease_until = datetime.now(timezone.utc) + timedelta(minutes=5)
-    intents = create_candidates(db, event)
+    if event.event_type == "LAB_RESULT_CREATED":
+        from ..services.report_service import resume_for_event
+        outcomes = resume_for_event(db, event)
+        if any(outcome.get("reason") == "TOOL_ERROR" for outcome in outcomes):
+            raise RuntimeError("report lookup failed")
+        job.status, job.lease_until, job.last_error, job.retry_at = JobStatus.SUCCEEDED, None, None, None
+        return {"event_id": event.id, "status": "SUCCEEDED", "resumed": outcomes}
+    intents = create_candidates(db, event) if event.event_type in {"NOTE_CREATED", "PROGRESS_NOTE_CREATED"} else []
     registry = build_default_registry()
     outputs: list[dict[str, object]] = []
     for intent in intents:
@@ -39,20 +46,26 @@ def process_job(db: Session, job: EventJob) -> dict[str, object]:
     job.status = JobStatus.SUCCEEDED
     job.lease_until = None
     job.last_error = None
+    job.retry_at = None
     return {"event_id": event.id, "intents": outputs}
 
 
 def claim_next(db: Session) -> EventJob | None:
-    now = datetime.now(timezone.utc)
-    job = db.scalar(select(EventJob).where((EventJob.status == JobStatus.PENDING) | ((EventJob.status == JobStatus.LEASED) & (EventJob.lease_until < now))).order_by(EventJob.id).with_for_update(skip_locked=True))
-    return job
+    from .queue import claim_job
+    return claim_job(db)
 
 
-def run_once(db: Session) -> dict[str, object] | None:
-    job = claim_next(db)
+def run_job(db: Session, job_id: int, *, raise_errors=False):
+    job = db.scalar(select(EventJob).where(EventJob.id == job_id).with_for_update())
     if job is None:
-        return None
-    job_id, attempt = job.id, job.attempt + 1
+        raise ValueError("job not found")
+    now = datetime.now(timezone.utc)
+    from ..services.report_service import utc
+    if job.status == JobStatus.SUCCEEDED:
+        return {"status": "SUCCEEDED", "duplicate": True, "event_id": job.event_id}
+    if job.status == JobStatus.FAILED or (job.retry_at and utc(job.retry_at) > now) or (job.status == JobStatus.LEASED and job.lease_until and utc(job.lease_until) > now):
+        return {"status": str(job.status), "deferred": True, "event_id": job.event_id}
+    attempt = job.attempt + 1
     try:
         result = process_job(db, job)
         db.commit()
@@ -60,10 +73,18 @@ def run_once(db: Session) -> dict[str, object] | None:
     except Exception as exc:
         db.rollback()
         job = db.get(EventJob, job_id)
-        job.attempt = attempt
-        job.lease_until = None
+        job.attempt, job.lease_until = attempt, None
         job.status = JobStatus.FAILED if attempt >= 3 else JobStatus.PENDING
-        job.last_error = str(exc)
+        job.last_error = f"{type(exc).__name__}: 事件处理失败，未确认或关闭任何任务"
         job.retry_at = datetime.now(timezone.utc) + timedelta(seconds=min(attempt * 10, 60))
         db.commit()
-        raise
+        if raise_errors:
+            raise
+        return {"event_id": job.event_id, "status": job.status, "error": job.last_error}
+
+
+def run_once(db: Session) -> dict[str, object] | None:
+    job = claim_next(db)
+    if job is None:
+        return None
+    return run_job(db, job.id)

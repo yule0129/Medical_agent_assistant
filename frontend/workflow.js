@@ -192,7 +192,7 @@ function openWorkflowPanel() {
 }
 function candidateHtml(item) {
   return `<div class="workflow-item" data-intent-id="${item.id}"><div><b>${html(taskType(item.intent_type))}：${html(item.target)}</b><p>${html(item.raw_text)}</p>
-    <label>计划时间 <input type="datetime-local" id="due-${item.id}" /></label><small> 留空表示待安排</small><p>
+    ${candidateMatchingHtml(item)}<label>计划时间 <input type="datetime-local" id="due-${item.id}" /></label><small> 留空表示待安排</small><p>
     <button class="primary" onclick="confirmWorkflowIntent(${item.id})">确认并加入任务安排</button></p><input id="ignoreReason-${item.id}" placeholder="如需忽略，请填写原因" /> <button class="secondary" onclick="rejectWorkflowIntent(${item.id})">忽略</button><p id="candidateError-${item.id}" role="alert" style="color:#b42318"></p></div></div>`;
 }
 function taskHtml(item) {
@@ -246,7 +246,8 @@ async function finishRounding(id) {
 async function confirmWorkflowIntent(id) {
   try {
     const value=document.getElementById('due-'+id)?.value;
-    await postWorkflow('/intents/'+id+'/confirm',{doctor_id:1,due_at:value?new Date(value).toISOString():null});
+    const specimen=document.getElementById('candidateSpecimen-'+id)?.value.trim();const order=document.getElementById('candidateOrder-'+id)?.value.trim();const intent=workflowIntents.find(i=>i.id===id);
+    await postWorkflow('/intents/'+id+'/confirm',{doctor_id:1,due_at:value?new Date(value).toISOString():null,matching:specimen||order?{test_name:intent.target,specimen_id:specimen||undefined,order_id:order||undefined}:undefined});
     showToast('已加入任务安排'); await refreshWorkflow();await refreshDashboardTotals();
   } catch(error) {showToast('确认失败：'+error.message);}
 }
@@ -289,7 +290,7 @@ async function openTaskDetail(id) {
       ${!simple&&t.status==='RESULT_AVAILABLE'?`<button class="primary" onclick="performTask(${id},${t.version},'acknowledge')">确认已查看结果</button>`:''}
       ${!simple&&t.status==='ACKNOWLEDGED'?`<button class="primary" onclick="performTask(${id},${t.version},'resolve')">保存处理结论并完成</button>`:''}
       <button class="secondary" onclick="performTask(${id},${t.version},'cancel')">填写原因并取消</button></p><p class="section-note">${simple?'填写实际执行记录后由医生明确完成任务。':'下一步：'+(t.status==='WAITING_EVENT'?'登记结果 → 确认查看 → 填写结论完成':t.status==='RESULT_AVAILABLE'?'确认查看 → 填写结论完成':'填写处理结论并完成')+'。检验结果暂由医生手工登记。'}</p><p id="taskError" role="alert" style="color:#b42318"></p>`}
-      <h3>操作记录</h3>${data.history.map(h=>`<p>${html(localTime(h.at))} · ${html(h.action)} · ${html(h.detail.note||'')}</p>`).join('')}`;
+      ${reportWorkflowHtml(t,data)}<h3>操作记录</h3>${data.history.map(h=>`<p>${html(localTime(h.at))} · ${html(h.action)} · ${html(h.detail.note||'')}</p>`).join('')}`;
     const date=document.getElementById('taskDue'); if(date && t.due_at){const d=new Date(t.due_at);date.value=new Date(d-d.getTimezoneOffset()*60000).toISOString().slice(0,16);}
     const button=document.getElementById('panelAction');button.disabled=false;button.textContent='返回任务安排';button.onclick=openTaskSchedule;
   }catch(error){showToast(error.message);}
@@ -302,7 +303,7 @@ async function performTask(id, version, action) {
   taskSaving=true;document.querySelectorAll('#panelBody button').forEach(b=>b.disabled=true);
   try {
     const due=document.getElementById('taskDue')?.value;
-    await postWorkflow(`/loops/${id}/${action}`,{doctor_id:1,expected_version:version,note,due_at:due?new Date(due).toISOString():null});
+    await postWorkflow(`/loops/${id}/${action}`,{doctor_id:1,expected_version:version,note,evidence_id:Number(document.getElementById('taskEvidenceId')?.dataset.evidenceId)||undefined,due_at:due?new Date(due).toISOString():null});
     showToast(['complete','resolve'].includes(action)?'任务已完成，已移入完成记录':'任务已保存'); await openTaskDetail(id); await refreshWorkflow(); await refreshDashboardTotals();
   }catch(error){if(message)message.textContent='操作失败：'+error.message;else showToast(error.message);document.querySelectorAll('#panelBody button').forEach(b=>b.disabled=false);}
   finally{taskSaving=false;}
@@ -312,7 +313,7 @@ async function openHandoff() {
   document.getElementById('panelBody').textContent='正在生成...';
   document.getElementById('panelModal').classList.add('show');
   const button=document.getElementById('panelAction');button.textContent='返回工作流';button.onclick=openWorkflowPanel;
-  try {const data=await postWorkflow(`/encounters/${currentEncounterId}/handoffs`,{doctor_id:1});const pre=document.createElement('div');pre.className='record-text';pre.textContent=data.content;document.getElementById('panelBody').replaceChildren(pre);showToast('交班草稿 #'+data.id+' 已保存');}catch(error){document.getElementById('panelBody').textContent='生成失败：'+error.message;}
+  try {const data=await postWorkflow(`/encounters/${currentEncounterId}/handoffs`,{doctor_id:1});const pre=document.createElement('div');pre.className='record-text';pre.textContent=data.content;document.getElementById('panelBody').replaceChildren(pre);for(const ref of data.references||[]){if(ref.loop_id){const link=document.createElement('button');link.className='secondary';link.textContent='打开待办任务 #'+ref.loop_id+(ref.evidence_id?'（含报告证据）':'');link.onclick=()=>openTaskDetail(ref.loop_id);document.getElementById('panelBody').append(link);}}showToast('交班草稿 #'+data.id+' 已保存');}catch(error){document.getElementById('panelBody').textContent='生成失败：'+error.message;}
 }
 
 (async function initializeWorkflow() {

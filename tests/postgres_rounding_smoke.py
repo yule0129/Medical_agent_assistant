@@ -18,12 +18,14 @@ from sqlalchemy.orm import Session
 from backend.db import engine, get_db
 from backend.main import app
 from backend.models import (AuditLog, ClinicalIntent, Encounter, EvidenceNode,
-                            MedicalRecord, OpenLoop, RoundingSession)
+                            MedicalRecord, OpenLoop, RoundingSession, LabReport, Finding, ClinicalEvent,
+                            EventJob, AgentRun, AgentStep, ReviewDecision, ResultAcknowledgement)
 
 
 def main():
     assert engine.dialect.name == 'postgresql', 'This check requires the configured PostgreSQL database.'
-    models = [MedicalRecord, RoundingSession, ClinicalIntent, OpenLoop, EvidenceNode, AuditLog]
+    models = [MedicalRecord, RoundingSession, ClinicalIntent, OpenLoop, EvidenceNode, AuditLog,
+              LabReport, Finding, ClinicalEvent, EventJob, AgentRun, AgentStep, ReviewDecision, ResultAcknowledgement]
     with engine.connect() as connection:
         transaction = connection.begin()
 
@@ -88,8 +90,38 @@ def main():
                 first_note = http.get(f"/api/medical-records/{saved['record_id']}").json()['content']
                 second_note = http.get(f"/api/medical-records/{second['record_id']}").json()['content']
                 assert '再次查房' not in first_note and '再次查房' in second_note
+                # Report-triggered rule recovery; all rows remain rollback-only.
+                marker=str(uuid4())
+                automatic=post('/rounding-sessions',dict(doctor_id=1,patient_id=patient_id,encounter_id=encounter_id,
+                    started_at=now,ended_at=now,request_key='AUTO-'+marker,transcript='血培养结果出来后通知我'))
+                intent_id=automatic['workflow']['intents'][0]['intent_id']
+                loop=post(f'/intents/{intent_id}/confirm',{'doctor_id':1,'matching':{'test_name':'血培养','specimen_id':marker}})['loop_id']
+                raw=dict(doctor_id=1,patient_id=patient_id,encounter_id=encounter_id,report_id='REPORT-'+marker,
+                    event_key='EVENT-'+marker,report_version=1,test_name='血培养',specimen_id=marker,
+                    result_text='合成培养报告',reported_at=now)
+                post('/lab-reports',raw)
+                state=http.get(f'/api/loops/{loop}/history').json()
+                assert state['task']['status']=='RESULT_AVAILABLE'
+                finding=state['findings'][0]
+                post(f"/findings/{finding['id']}/reviews",{'doctor_id':1,'expected_version':finding['version'],'decision':'ACCEPT','idempotency_key':'REVIEW-'+marker})
+                assert http.get(f'/api/loops/{loop}/history').json()['task']['status']=='RESULT_AVAILABLE'
+                ack=post(f'/loops/{loop}/acknowledge',{'doctor_id':1,'expected_version':state['task']['version'],'evidence_id':state['evidence']['id']})
+                closed=post(f'/loops/{loop}/resolve',{'doctor_id':1,'expected_version':ack['version'],'note':'已明确处理培养结果'})
+                child=post(f'/loops/{loop}/follow-up',{'doctor_id':1,'expected_version':closed['version'],'request_key':'FOLLOW-'+marker,
+                    'matching':{'test_name':'药敏','specimen_id':marker},'note':'继续等待药敏'})
+                post('/lab-reports',{**raw,'report_id':'AST-'+marker,'event_key':'AST-EVENT-'+marker,'test_name':'药敏','result_text':'合成药敏报告'})
+                assert http.get(f"/api/loops/{child['id']}/history").json()['task']['status']=='RESULT_AVAILABLE'
+                trace=http.get(f"/api/loops/{child['id']}/runs").json()['runs']
+                restored=[r for r in trace if any(s['tool_name']=='get_lab_reports' for s in r['steps'])]
+                assert len(restored)==2 and restored[1]['prior_run_id']==restored[0]['id']
+                assert restored[1]['plan_version']>restored[0]['plan_version']
+                post('/lab-reports',{**raw,'event_key':'REVISED-'+marker,'report_version':2,'result_text':'修订培养报告'})
+                revised=http.get(f'/api/loops/{loop}/history').json()
+                assert revised['task']['status']=='RESULT_AVAILABLE' and revised['result']['report_version']==2
+                assert http.get(f"/api/evidence/{state['evidence']['id']}").json()['content']['note']=='合成培养报告'
                 print('PASS PostgreSQL: finish rounding with follow-ups preserved -> complete all four task types -> read persisted finish, task history and summary.')
                 print('PASS PostgreSQL: second rounding and note remain independent; patient history returns both sessions and records.')
+                print('PASS PostgreSQL: automatic report matching, separate finding review, version-specific acknowledgement, two event recoveries, dependent loop and immutable revisions.')
         finally:
             app.dependency_overrides.clear()
             transaction.rollback()

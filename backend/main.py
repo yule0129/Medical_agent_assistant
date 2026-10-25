@@ -19,6 +19,7 @@ from .routes.rounding import router as rounding_router
 from .routes.records import router as records_router
 from .routes.timeline import router as timeline_router
 from .routes.tasks import router as tasks_router
+from .routes.reports import router as reports_router
 from .services.intent_service import require_scope
 from .services.rounding_service import rounding_summary
 
@@ -101,6 +102,7 @@ app.include_router(workflow_router)
 app.include_router(rounding_router)
 app.include_router(records_router)
 app.include_router(timeline_router)
+app.include_router(reports_router)
 app.include_router(tasks_router)
 
 

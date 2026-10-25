@@ -6,7 +6,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ..models import ClinicalEvent, Encounter, MedicalRecord, OpenLoop, Patient
+from ..models import ClinicalEvent, Encounter, LabReport, MedicalRecord, OpenLoop, Patient
 from .registry import ToolRegistry
 from .schemas import ToolContext, ToolResult, ToolStatus
 
@@ -92,4 +92,25 @@ def build_default_registry() -> ToolRegistry:
     registry.register("get_progress_notes", get_progress_notes)
     registry.register("get_handoff", get_handoff)
     registry.register("get_loop_state", get_loop_state)
+    registry.register("get_lab_reports", get_lab_reports)
     return registry
+
+
+def get_lab_reports(db: Session, context: ToolContext) -> ToolResult:
+    _, _, error = _scope(db, context)
+    if error:
+        return _error("get_lab_reports", context, error)
+    query = select(LabReport).where(LabReport.patient_id == context.patient_id, LabReport.encounter_id == context.encounter_id)
+    for key in ("report_id", "specimen_id", "order_id"):
+        if getattr(context, key):
+            query = query.where(getattr(LabReport, key) == getattr(context, key))
+    if context.from_time:
+        query = query.where(LabReport.reported_at >= context.from_time)
+    if context.to_time:
+        query = query.where(LabReport.reported_at <= context.to_time)
+    rows = db.scalars(query.order_by(LabReport.report_version.desc(), LabReport.id.desc()).limit(context.limit + 1)).all()
+    complete = len(rows) <= context.limit
+    rows = rows[:context.limit]
+    return ToolResult(tool_name="get_lab_reports", status=ToolStatus.PARTIAL if not complete else ToolStatus.FOUND if rows else ToolStatus.EMPTY,
+        complete=complete, items=[{"id": r.id, "event_id": r.event_id, "report_id": r.report_id, "report_version": r.report_version} for r in rows],
+        sources=[{"type": "lab_report", "id": r.id, "event_id": r.event_id, "version": r.report_version} for r in rows], query=context.model_dump(mode="json"))

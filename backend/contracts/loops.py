@@ -25,6 +25,7 @@ class LoopTransitionRequest(BaseModel):
     clinician_confirmed: bool = False
     resolution_note: str | None = None
     occurred_at: datetime
+    report_revision: bool = False
 
     @field_validator("occurred_at")
     @classmethod

@@ -207,8 +207,43 @@ def main():
             wait("document.querySelectorAll('[data-history-record]').length===2")
             assert js(f"document.querySelector('[data-history-rounding=\"{round_id}\"]').textContent.includes('已结束')")
             assert js(f"document.querySelector('[data-history-rounding=\"{second_round_id}\"]').textContent.includes('待结束')")
+            # Automatic event recovery, independent review and a dependent loop.
+            js('startNewRounding(1)')
+            wait("document.getElementById('roundModal').classList.contains('show')")
+            js("document.getElementById('roundTranscript').value='血培养结果出来后通知我';document.getElementById('generateBtn').click();document.getElementById('generateBtn').click()")
+            wait("document.querySelectorAll('#workflowIntents [data-intent-id]').length===1")
+            js("document.querySelector('#workflowIntents details').open=true;document.querySelector('[id^=candidateSpecimen]').value='AUTO-S1';document.querySelector('#workflowIntents .primary').click()")
+            wait("document.querySelectorAll('#workflowIntents [data-intent-id]').length===0 && workflowTasks.some(t=>t.matching_criteria.specimen_id==='AUTO-S1')")
+            auto_loop=js("workflowTasks.find(t=>t.matching_criteria.specimen_id==='AUTO-S1').id")
+            js(f'openTaskDetail({auto_loop})')
+            wait("document.getElementById('labImportForm')!==null")
+            js("document.getElementById('labImportForm').open=true;document.getElementById('labReportId').value='AUTO-R1';document.getElementById('labResult').value='合成报告 <img src=x onerror=\"window.reportInjected=true\">';document.getElementById('importLabButton').click()")
+            wait("document.getElementById('taskEvidenceId')?.dataset.evidenceId && !reportBusy")
+            assert js("document.getElementById('panelBody').textContent.includes('AUTO-R1')")
+            assert js('window.reportInjected===undefined')
+            js("document.querySelector('[data-finding-id] button').click()")
+            wait("document.querySelector('[data-finding-id]')?.textContent.includes('ACCEPTED') && !reportBusy")
+            assert js("document.querySelector('#panelBody .primary').textContent==='确认已查看结果'")
+            js("document.querySelector('#panelBody .primary').click()")
+            wait("document.querySelector('#panelBody .primary')?.textContent==='保存处理结论并完成' && !taskSaving")
+            js("document.getElementById('taskNote').value='已核对培养，继续等待药敏';document.querySelector('#panelBody .primary').click()")
+            wait("document.getElementById('followUpForm')!==null && !document.getElementById('taskNote') && !taskSaving")
+            js("document.getElementById('followUpForm').open=true;document.getElementById('followTest').value='药敏';document.getElementById('followNote').value='继续等待同一标本药敏';document.querySelector('#followUpForm button').click()")
+            wait("viewedReportTask.id!=="+str(auto_loop)+" && document.getElementById('labImportForm')!==null && !reportBusy")
+            child_loop=js('viewedReportTask.id')
+            js("document.getElementById('labImportForm').open=true;document.getElementById('labReportId').value='AUTO-AST-R1';document.getElementById('labResult').value='合成药敏报告';document.getElementById('importLabButton').click()")
+            wait("document.getElementById('panelBody').textContent.includes('AUTO-AST-R1') && document.getElementById('taskEvidenceId')?.dataset.evidenceId && !reportBusy")
+            trace=js(f"workflowFetch('/loops/{child_loop}/runs')")
+            investigations=[r for r in trace['runs'] if any(s['tool_name']=='get_lab_reports' for s in r['steps'])]
+            assert len(investigations)==2
+            assert investigations[1]['prior_run_id']==investigations[0]['id']
+            assert investigations[1]['plan_version']>investigations[0]['plan_version']
+            cdp('Page.reload')
+            wait("document.getElementById('homeWorkflowStatus')?.textContent==='已连接'")
+            js(f'openTaskDetail({child_loop})')
+            wait("document.getElementById('panelBody').textContent.includes('AUTO-AST-R1')")
             assert not errors, errors
-            print('PASS: rounding/task closure; same patient second visit; independent historical notes and original transcripts; admission filter; reload preserves both sessions and completion states; no JavaScript exceptions or HTML execution.')
+            print('PASS: prior rounding/history regression; report event auto recovery; independent finding review; version-specific acknowledgement; physician resolution; dependent sensitivity task and second event recovery; persisted trace and reload; incoming report text never executes.')
         finally:
             server.should_exit = True
             thread.join(timeout=5)

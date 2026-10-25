@@ -12,6 +12,9 @@ from ..config import settings
 from ..models import ClinicalEvent, Encounter, EventJob, JobStatus, Patient
 from ..contracts.events import EventType
 from ..worker.processor import run_once
+from ..contracts.reports import LabPayload
+from ..services.report_ingestion import ingest_report
+from pydantic import ValidationError
 
 router = APIRouter(prefix="/api/events", tags=["events"])
 
@@ -46,9 +49,21 @@ def create_event(payload: EventCreate, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="patient and encounter scope not found")
     if patient.doctor_id != payload.doctor_id and encounter.attending_doctor_id != payload.doctor_id:
         raise HTTPException(status_code=403, detail="doctor is outside encounter scope")
+    if payload.event_type == EventType.LAB_RESULT_CREATED:
+        try:
+            lab = LabPayload.model_validate(payload.payload)
+            event, job, duplicate = ingest_report(db, event_key=payload.event_key, doctor_id=payload.doctor_id,
+                patient_id=payload.patient_id, encounter_id=payload.encounter_id, reported_at=payload.occurred_at, payload=lab, source=payload.source)
+            db.commit()
+            return {"event_id": event.id, "job_id": job.id, "duplicate": duplicate, "status": job.status}
+        except ValidationError as exc:
+            raise HTTPException(422, "报告结构不完整：" + str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(409, str(exc)) from exc
     existing = db.scalar(select(ClinicalEvent).where(ClinicalEvent.event_key == payload.event_key))
     if existing:
-        same = existing.patient_id == payload.patient_id and existing.encounter_id == payload.encounter_id and existing.payload == {**payload.payload, "doctor_id": payload.doctor_id}
+        from ..services.report_service import utc
+        same = existing.patient_id == payload.patient_id and existing.encounter_id == payload.encounter_id and existing.payload == {**payload.payload, "doctor_id": payload.doctor_id} and existing.event_type == payload.event_type.value and existing.source == payload.source and utc(existing.occurred_at) == utc(payload.occurred_at)
         if not same:
             raise HTTPException(status_code=409, detail="event_key already exists with different content")
         job = db.scalar(select(EventJob).where(EventJob.event_id == existing.id))
