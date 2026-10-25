@@ -43,11 +43,13 @@ def require_scope(db: Session, encounter_id: int, doctor_id: int):
         raise ValueError("doctor is outside encounter scope")
 
 
-def confirm_intent(db: Session, intent_id: int, waiting_for: str | None, doctor_id: int, due_at: datetime | None = None) -> OpenLoop:
+def confirm_intent(db: Session, intent_id: int, waiting_for: str | None, doctor_id: int, due_at: datetime | None = None, matching: dict | None = None) -> OpenLoop:
     intent = db.scalar(select(ClinicalIntent).where(ClinicalIntent.id == intent_id).with_for_update())
     if intent is None:
         raise ValueError("intent not found")
     require_scope(db, intent.encounter_id, doctor_id)
+    if matching and intent.intent_type not in {"FOLLOW_RESULT", "RECHECK"}:
+        raise ValueError("执行型任务不能绑定检验报告条件")
     if intent.status == "CONFIRMED":
         existing = db.scalar(select(OpenLoop).where(OpenLoop.intent_id == intent.id, OpenLoop.parent_loop_id.is_(None)))
         if existing:
@@ -62,5 +64,10 @@ def confirm_intent(db: Session, intent_id: int, waiting_for: str | None, doctor_
         loop = OpenLoop(loop_key=loop_key, intent_id=intent.id, patient_id=intent.patient_id, encounter_id=intent.encounter_id, waiting_for=waiting_for or candidate_target(intent), due_at=due_at, status=LoopStatus.WAITING_EVENT, version=1, created_at=now, updated_at=now, state_reason=f"doctor:{doctor_id} confirmed")
         db.add(loop)
         db.flush()
+        loop.matching_criteria = matching or {}
+        loop.workflow_memory = {"waiting_for": loop.waiting_for, "dependencies": [], "stop_reason": "WAITING_EXTERNAL_EVENT"}
         db.add(AuditLog(actor_type="DOCTOR", actor_id=str(doctor_id), action="CONFIRM_INTENT", resource_type="OpenLoop", resource_id=str(loop.id), new_state={"status": "WAITING_EVENT"}, created_at=now))
+        if matching:
+            from .report_service import backfill_loop
+            backfill_loop(db, loop)
     return loop

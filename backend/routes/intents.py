@@ -10,6 +10,7 @@ from ..models import ClinicalIntent, AuditLog
 from datetime import timezone
 from ..services.intent_service import confirm_intent, require_scope
 from ..providers.rules import extract_intent
+from ..contracts.reports import MatchingCriteria
 
 router = APIRouter(prefix="/api/intents", tags=["intents"])
 
@@ -19,6 +20,7 @@ class IntentConfirm(BaseModel):
     doctor_id: int = Field(gt=0)
     waiting_for: str | None = Field(default=None, min_length=1, max_length=120)
     due_at: datetime | None = None
+    matching: MatchingCriteria | None = None
 
     @field_validator("due_at")
     @classmethod
@@ -45,7 +47,7 @@ def get_intent(intent_id: int, db: Session = Depends(get_db)):
 @router.post("/{intent_id}/confirm")
 def confirm(intent_id: int, payload: IntentConfirm, db: Session = Depends(get_db)):
     try:
-        loop = confirm_intent(db, intent_id, payload.waiting_for, payload.doctor_id, payload.due_at)
+        loop = confirm_intent(db, intent_id, payload.waiting_for, payload.doctor_id, payload.due_at, payload.matching.model_dump(exclude_none=True) if payload.matching else None)
         db.commit()
         return {"intent_id": intent_id, "loop_id": loop.id, "loop_key": loop.loop_key, "status": loop.status, "waiting_for": loop.waiting_for}
     except ValueError as exc:

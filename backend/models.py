@@ -171,6 +171,9 @@ class OpenLoop(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     state_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    matching_criteria: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    workflow_memory: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    current_evidence_id: Mapped[int | None] = mapped_column(ForeignKey("evidence_nodes.id"), nullable=True)
 
 
 class EvidenceNode(Base):
@@ -199,6 +202,24 @@ class Finding(Base):
     status: Mapped[str] = mapped_column(String(30), default="PENDING_REVIEW")
     searched_sources: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    version: Mapped[int] = mapped_column(default=1)
+    __table_args__ = (UniqueConstraint("loop_id", "evidence_id", name="uq_finding_loop_evidence"),)
+
+
+class LabReport(Base):
+    __tablename__ = "lab_reports"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    event_id: Mapped[int] = mapped_column(ForeignKey("clinical_events.id"), unique=True)
+    patient_id: Mapped[int] = mapped_column(ForeignKey("patients.id"), index=True)
+    encounter_id: Mapped[int] = mapped_column(ForeignKey("encounters.id"), index=True)
+    report_id: Mapped[str] = mapped_column(String(100))
+    report_version: Mapped[int] = mapped_column()
+    test_name: Mapped[str] = mapped_column(String(120))
+    specimen_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    order_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    result_text: Mapped[str] = mapped_column(Text)
+    reported_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    __table_args__ = (UniqueConstraint("patient_id", "encounter_id", "report_id", "report_version", name="uq_lab_report_version"),)
 
 
 class AgentRun(Base):

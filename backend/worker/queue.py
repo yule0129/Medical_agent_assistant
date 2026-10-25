@@ -14,7 +14,7 @@ def claim_job(db: Session) -> EventJob | None:
     return db.scalar(
         select(EventJob)
         .where(
-            (EventJob.status == JobStatus.PENDING)
+            ((EventJob.status == JobStatus.PENDING) & ((EventJob.retry_at.is_(None)) | (EventJob.retry_at <= now)))
             | ((EventJob.status == JobStatus.LEASED) & (EventJob.lease_until < now))
         )
         .order_by(EventJob.id)

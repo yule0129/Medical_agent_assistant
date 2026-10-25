@@ -32,6 +32,9 @@ def transition_loop(request: LoopTransitionRequest) -> TransitionResult:
         # An execution task has no lab report to wait for or acknowledge.
         allowed[LoopStatus.WAITING_EVENT].add(LoopStatus.RESOLVED)
         allowed[LoopStatus.RESULT_AVAILABLE].add(LoopStatus.RESOLVED)
+    if request.report_revision and request.has_evidence and request.intent_type in {"FOLLOW_RESULT", "RECHECK"}:
+        allowed[LoopStatus.ACKNOWLEDGED].add(LoopStatus.RESULT_AVAILABLE)
+        allowed[LoopStatus.RESOLVED].add(LoopStatus.RESULT_AVAILABLE)
     if target not in allowed[current]:
         raise InvalidLoopTransition(f"不允许从 {current} 转换到 {target}")
     if target == LoopStatus.RESULT_AVAILABLE and not request.has_evidence:

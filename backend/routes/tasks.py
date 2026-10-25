@@ -15,6 +15,7 @@ from ..domain.loop_state import transition_loop
 from ..models import (AuditLog, ClinicalEvent, ClinicalIntent, EvidenceNode, HandoffReport,
                       MedicalRecord, OpenLoop, Patient, ResultAcknowledgement)
 from ..services.intent_service import require_scope
+from ..services.report_service import current_evidence, require_latest_evidence
 
 router = APIRouter(prefix="/api", tags=["tasks"])
 
@@ -32,7 +33,9 @@ def task_out(row, db):
             "version": row.version, "due_at": row.due_at.isoformat() if row.due_at else None,
             "state_reason": row.state_reason, "record_id": record.id if record else None,
             "source_rounding_session_id": source_id,
-            "completed_at": row.updated_at.isoformat() if row.status == "RESOLVED" else None}
+            "completed_at": row.updated_at.isoformat() if row.status == "RESOLVED" else None,
+            "matching_criteria": row.matching_criteria, "workflow_memory": row.workflow_memory,
+            "current_evidence_id": row.current_evidence_id, "parent_loop_id": row.parent_loop_id}
 
 
 @router.get("/tasks")
@@ -56,6 +59,7 @@ class TaskAction(BaseModel):
     expected_version: int = Field(ge=1)
     note: str = Field(default="", max_length=10000)
     due_at: datetime | None = None
+    evidence_id: int | None = Field(default=None, gt=0)
 
     @field_validator("due_at")
     @classmethod
@@ -90,7 +94,7 @@ def update_task(loop_id: int, action: str, payload: TaskAction, db: Session = De
         row.due_at = payload.due_at
     else:
         target = {"record-result": "RESULT_AVAILABLE", "acknowledge": "ACKNOWLEDGED", "resolve": "RESOLVED", "complete": "RESOLVED", "cancel": "CANCELLED"}[action]
-        evidence = db.scalar(select(EvidenceNode).where(EvidenceNode.evidence_key == f"TASK-{row.id}-RESULT"))
+        evidence = current_evidence(db, row)
         if action == "record-result":
             if row.status != "WAITING_EVENT" or not note:
                 raise HTTPException(409, "仅等待中的任务可登记结果，且必须填写结果或执行记录")
@@ -100,8 +104,16 @@ def update_task(loop_id: int, action: str, payload: TaskAction, db: Session = De
                                     content={"note": note, "doctor_id": payload.doctor_id}, verification_status="DOCTOR_ENTERED")
             db.add(evidence)
             db.flush()
+            row.current_evidence_id = evidence.id
         if action == "acknowledge" and evidence is None:
             raise HTTPException(409, "没有该任务的结果记录")
+        if action in {"acknowledge", "resolve"}:
+            try:
+                require_latest_evidence(db, evidence)
+            except ValueError as exc:
+                raise HTTPException(409, str(exc)) from exc
+        if action == "acknowledge" and evidence and evidence.source_type == "STRUCTURED_LAB_REPORT" and payload.evidence_id != evidence.id:
+            raise HTTPException(409, "请明确确认当前报告版本的证据 ID，旧报告不能确认新结果")
         if row.status == target:
             raise HTTPException(409, "该操作已完成，请刷新")
         try:
@@ -117,7 +129,10 @@ def update_task(loop_id: int, action: str, payload: TaskAction, db: Session = De
                 captured_at=now, content={"note": note, "doctor_id": payload.doctor_id}, verification_status="DOCTOR_ENTERED"))
         if action == "acknowledge":
             db.add(ResultAcknowledgement(loop_id=row.id, evidence_id=evidence.id,
-                doctor_id=payload.doctor_id, note=note, created_at=now, idempotency_key=f"TASK-ACK-{row.id}"))
+                doctor_id=payload.doctor_id, note=note, created_at=now, idempotency_key=f"TASK-ACK-{row.id}-{evidence.id}"))
+            from ..models import Finding
+            for finding in db.scalars(select(Finding).where(Finding.loop_id == row.id, Finding.evidence_id == evidence.id, Finding.status.in_(["PENDING_REVIEW", "ACCEPTED"]))):
+                finding.status, finding.version = "ACKNOWLEDGED", finding.version + 1
         row.status = target
     row.version += 1
     row.updated_at = now
@@ -139,8 +154,13 @@ def task_history(loop_id: int, doctor_id: int = 1, db: Session = Depends(get_db)
     except ValueError as exc:
         raise HTTPException(403, str(exc)) from exc
     history = db.scalars(select(AuditLog).where(AuditLog.resource_type == "OpenLoop", AuditLog.resource_id == str(loop_id)).order_by(AuditLog.id)).all()
-    evidence = db.scalar(select(EvidenceNode).where(EvidenceNode.evidence_key.in_([f"TASK-{loop_id}-RESULT", f"TASK-{loop_id}-EXECUTION"])).order_by(EvidenceNode.id.desc()))
+    evidence = current_evidence(db, row)
+    if evidence is None:
+        evidence = db.scalar(select(EvidenceNode).where(EvidenceNode.evidence_key == f"TASK-{loop_id}-EXECUTION"))
+    from .reports import list_findings
     return {"task": task_out(row, db), "result": evidence.content if evidence else None,
+            "evidence": {"id": evidence.id, "source_type": evidence.source_type, "source_ref": evidence.source_ref, "verification_status": evidence.verification_status} if evidence else None,
+            "findings": list_findings(doctor_id=doctor_id, loop_id=loop_id, db=db),
             "history": [{"action": h.action, "doctor_id": h.actor_id, "at": h.created_at.isoformat(), "detail": h.new_state} for h in history]}
 
 
@@ -163,7 +183,7 @@ def create_handoff(encounter_id: int, payload: HandoffCreate, db: Session = Depe
     if not pending and not candidates:
         content += "\n当前没有未完成任务或待确认计划。"
     report = HandoffReport(encounter_id=encounter_id, doctor_id=payload.doctor_id, content=content,
-        created_at=datetime.now(timezone.utc), references=[{"loop_id": t["id"], "version": t["version"]} for t in pending] + [{"intent_id": c.id} for c in candidates])
+        created_at=datetime.now(timezone.utc), references=[{"loop_id": t["id"], "version": t["version"], **({"evidence_id": t["current_evidence_id"]} if t["current_evidence_id"] else {})} for t in pending] + [{"intent_id": c.id} for c in candidates])
     db.add(report)
     db.commit()
     return {"id": report.id, "content": report.content, "status": report.status, "references": report.references}

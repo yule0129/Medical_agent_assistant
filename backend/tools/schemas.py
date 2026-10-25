@@ -23,6 +23,9 @@ class ToolContext(BaseModel):
     limit: int = Field(default=50, ge=1, le=100)
     from_time: datetime | None = None
     to_time: datetime | None = None
+    report_id: str | None = None
+    specimen_id: str | None = None
+    order_id: str | None = None
 
     @field_validator("from_time", "to_time")
     @classmethod
