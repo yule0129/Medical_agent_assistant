@@ -18,7 +18,7 @@ function reportWorkflowHtml(t,data) {
   viewedReportTask={id:t.id,version:t.version};
   if(!['FOLLOW_RESULT','RECHECK'].includes(t.intent_type))return '';
   const c=t.matching_criteria||{},r=data.result||{};
-  return `<section id="reportWorkflow"><h3>报告随访</h3><div id="taskRemoteUpdate" role="status"></div>
+  return `<section id="reportWorkflow"><h3>报告随访</h3>${agentWorkflowHtml(t)}<div id="taskRemoteUpdate" role="status"></div>
     <span id="taskEvidenceId" data-evidence-id="${data.evidence?.id||''}"></span>
     <p>${html(t.state_reason||'')}</p>
     ${r.report_id?`<p><b>报告 ${html(r.report_id)} · v${r.report_version}</b> · ${html(r.test_name)} · 标本 ${html(r.specimen_id||'未提供')} · 医嘱 ${html(r.order_id||'未提供')}</p><button class="secondary" onclick="showReportEvidence(${data.evidence.id})">查看报告证据与来源</button><div id="reportEvidenceView"></div>`:''}

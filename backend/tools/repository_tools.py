@@ -78,10 +78,16 @@ def get_loop_state(db: Session, context: ToolContext) -> ToolResult:
 
 
 def get_handoff(db: Session, context: ToolContext) -> ToolResult:
-    # Handoff is intentionally read-only and currently represented by loops.
-    result = get_loop_state(db, context)
-    result.tool_name = "get_handoff"
-    return result
+    from ..models import HandoffReport
+    _, _, error = _scope(db, context)
+    if error:
+        return _error("get_handoff", context, error)
+    rows = db.scalars(select(HandoffReport).where(HandoffReport.encounter_id == context.encounter_id).order_by(HandoffReport.id.desc()).limit(context.limit + 1)).all()
+    complete = len(rows) <= context.limit
+    rows = rows[:context.limit]
+    return ToolResult(tool_name="get_handoff", status=ToolStatus.PARTIAL if not complete else ToolStatus.FOUND if rows else ToolStatus.EMPTY,
+        complete=complete, items=[{"id": r.id, "content": r.content, "status": r.status, "version": r.snapshot_version} for r in rows],
+        sources=[{"type": "handoff_report", "id": r.id, "version": r.snapshot_version} for r in rows], query=context.model_dump(mode="json"))
 
 
 def build_default_registry() -> ToolRegistry:

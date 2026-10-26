@@ -19,6 +19,12 @@ def main() -> None:
             try:
                 with SessionLocal() as db:
                     result = run_once(db)
+                    from agent.runtime.worker import process_agent_once
+                    from agent.runtime.scheduler import schedule_due
+                    schedule_due(db)
+                    agent_result = process_agent_once(db)
+                    if agent_result:
+                        print(agent_result, flush=True)
                     if result:
                         print(result, flush=True)
             except Exception as exc:

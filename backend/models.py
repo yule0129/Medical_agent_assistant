@@ -8,6 +8,7 @@ from sqlalchemy import DateTime, ForeignKey, JSON, String, Text, UniqueConstrain
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .db import Base
+from agent.admission.models import AdmissionWorkspace  # register shared metadata
 
 
 class LoopStatus(str, enum.Enum):
@@ -46,6 +47,10 @@ class Patient(Base):
     bed_number: Mapped[str] = mapped_column(String(20))
     gender: Mapped[str] = mapped_column(String(10), default="未记录")
     age: Mapped[int] = mapped_column(default=0)
+    ethnicity: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    marital_status: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    birthplace: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    occupation: Mapped[str | None] = mapped_column(String(120), nullable=True)
     diagnosis: Mapped[str] = mapped_column(String(255))
     doctor_id: Mapped[int | None] = mapped_column(ForeignKey("doctors.id"), nullable=True)
     doctor: Mapped["Doctor | None"] = relationship(back_populates="patients")
@@ -60,6 +65,8 @@ class Encounter(Base):
     patient_id: Mapped[int] = mapped_column(ForeignKey("patients.id"), index=True)
     attending_doctor_id: Mapped[int | None] = mapped_column(ForeignKey("doctors.id"), nullable=True)
     admitted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    recorded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    history_reporter: Mapped[str | None] = mapped_column(String(120), nullable=True)
     discharged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     status: Mapped[str] = mapped_column(String(30), default="INPATIENT")
     diagnosis_snapshot: Mapped[str] = mapped_column(String(255), default="")
@@ -222,34 +229,8 @@ class LabReport(Base):
     __table_args__ = (UniqueConstraint("patient_id", "encounter_id", "report_id", "report_version", name="uq_lab_report_version"),)
 
 
-class AgentRun(Base):
-    __tablename__ = "agent_runs"
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    run_key: Mapped[str] = mapped_column(String(100), unique=True, index=True)
-    intent_id: Mapped[int | None] = mapped_column(ForeignKey("clinical_intents.id"), nullable=True)
-    loop_id: Mapped[int | None] = mapped_column(ForeignKey("open_loops.id"), nullable=True)
-    prior_run_id: Mapped[int | None] = mapped_column(ForeignKey("agent_runs.id"), nullable=True)
-    trigger_event_id: Mapped[int | None] = mapped_column(ForeignKey("clinical_events.id"), nullable=True)
-    plan_version: Mapped[int] = mapped_column(default=1)
-    provider: Mapped[str] = mapped_column(String(30), default="rules")
-    status: Mapped[str] = mapped_column(String(30), default="RUNNING")
-    stop_reason: Mapped[str | None] = mapped_column(String(80), nullable=True)
-    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
-    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
-class AgentStep(Base):
-    __tablename__ = "agent_steps"
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    run_id: Mapped[int] = mapped_column(ForeignKey("agent_runs.id"), index=True)
-    step_number: Mapped[int] = mapped_column()
-    action: Mapped[str] = mapped_column(String(60))
-    tool_name: Mapped[str | None] = mapped_column(String(80), nullable=True)
-    input_summary: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
-    result_summary: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
-    duration_ms: Mapped[int | None] = mapped_column(nullable=True)
 
 
 class ReviewDecision(Base):
@@ -304,3 +285,7 @@ class AuditLog(Base):
     reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     run_id: Mapped[int | None] = mapped_column(ForeignKey("agent_runs.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+# Compatibility exports for existing migrations and rule-workflow services.
+# Actual Agent ORM mappings live in the Agent component directory.
+from agent.persistence.models import AgentJob, AgentProposal, AgentRun, AgentStep  # noqa: E402,F401

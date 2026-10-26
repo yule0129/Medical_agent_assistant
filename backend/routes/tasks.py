@@ -20,6 +20,12 @@ from ..services.report_service import current_evidence, require_latest_evidence
 router = APIRouter(prefix="/api", tags=["tasks"])
 
 
+@router.get("/admission-tasks")
+def list_admission_tasks(doctor_id: int = 1, db: Session = Depends(get_db)):
+    from ..services.admission_service import admission_tasks
+    return admission_tasks(db, doctor_id)
+
+
 def task_out(row, db):
     intent = db.get(ClinicalIntent, row.intent_id)
     event = db.get(ClinicalEvent, intent.source_event_id) if intent.source_event_id else None
@@ -178,12 +184,24 @@ def create_handoff(encounter_id: int, payload: HandoffCreate, db: Session = Depe
     tasks = list_tasks(payload.doctor_id, encounter_id, db)
     pending = [t for t in tasks if t["status"] not in {"RESOLVED", "REJECTED", "CANCELLED"}]
     candidates = db.scalars(select(ClinicalIntent).where(ClinicalIntent.encounter_id == encounter_id, ClinicalIntent.status == "CANDIDATE")).all()
-    content = "未完成任务交班草稿\n" + "\n".join(f"任务 #{t['id']}：{t['waiting_for']} · {t['status']} · 计划时间 {t['due_at'] or '待安排'}" for t in pending)
+    lines = []
+    for t in pending:
+        lines.append(f"任务 #{t['id']}：{t['waiting_for']} · {t['status']} · 负责人 医生 #{payload.doctor_id} · 计划时间 {t['due_at'] or '待安排'}")
+        evidence = db.get(EvidenceNode, t['current_evidence_id']) if t['current_evidence_id'] else None
+        if evidence:
+            ack = db.scalar(select(ResultAcknowledgement.id).where(ResultAcknowledgement.loop_id == t['id'], ResultAcknowledgement.evidence_id == evidence.id))
+            lines.append(f"  证据 #{evidence.id}：{evidence.source_ref} · {'医生已确认查看' if ack else '待医生确认查看'} · 报告原文摘录：{evidence.content.get('note', '')[:240]}")
+        if t['parent_loop_id']:
+            parent = db.get(OpenLoop, t['parent_loop_id'])
+            lines.append(f"  前序任务 #{parent.id}：{parent.waiting_for} · {parent.status}；本次仍需跟进 {t['waiting_for']}")
+    content = "未完成任务交班草稿\n" + "\n".join(lines)
     content += "\n" + "\n".join(f"待确认意图 #{c.id}：{c.raw_text}" for c in candidates)
     if not pending and not candidates:
         content += "\n当前没有未完成任务或待确认计划。"
     report = HandoffReport(encounter_id=encounter_id, doctor_id=payload.doctor_id, content=content,
-        created_at=datetime.now(timezone.utc), references=[{"loop_id": t["id"], "version": t["version"], **({"evidence_id": t["current_evidence_id"]} if t["current_evidence_id"] else {})} for t in pending] + [{"intent_id": c.id} for c in candidates])
+        created_at=datetime.now(timezone.utc), references=[{"loop_id": t["id"], "version": t["version"], **({"evidence_id": t["current_evidence_id"]} if t["current_evidence_id"] else {}),
+            **({"parent_loop_id": t["parent_loop_id"], "parent_version": db.get(OpenLoop, t["parent_loop_id"]).version,
+                "parent_evidence_id": db.get(OpenLoop, t["parent_loop_id"]).current_evidence_id} if t["parent_loop_id"] else {})} for t in pending] + [{"intent_id": c.id} for c in candidates])
     db.add(report)
     db.commit()
     return {"id": report.id, "content": report.content, "status": report.status, "references": report.references}

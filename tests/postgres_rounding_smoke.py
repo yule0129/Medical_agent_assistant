@@ -19,13 +19,18 @@ from backend.db import engine, get_db
 from backend.main import app
 from backend.models import (AuditLog, ClinicalIntent, Encounter, EvidenceNode,
                             MedicalRecord, OpenLoop, RoundingSession, LabReport, Finding, ClinicalEvent,
-                            EventJob, AgentRun, AgentStep, ReviewDecision, ResultAcknowledgement)
+                            EventJob, AgentRun, AgentStep, ReviewDecision, ResultAcknowledgement, AgentJob, AgentProposal)
 
 
 def main():
     assert engine.dialect.name == 'postgresql', 'This check requires the configured PostgreSQL database.'
     models = [MedicalRecord, RoundingSession, ClinicalIntent, OpenLoop, EvidenceNode, AuditLog,
-              LabReport, Finding, ClinicalEvent, EventJob, AgentRun, AgentStep, ReviewDecision, ResultAcknowledgement]
+              LabReport, Finding, ClinicalEvent, EventJob, AgentRun, AgentStep, ReviewDecision, ResultAcknowledgement, AgentJob, AgentProposal]
+    from agent.llm import deepseek as agent_provider
+    from agent.runtime.worker import process_agent_once
+    from test_agent_runtime import TestModel
+    original_configured = agent_provider.configured
+    agent_provider.configured = lambda: True
     with engine.connect() as connection:
         transaction = connection.begin()
 
@@ -119,10 +124,28 @@ def main():
                 revised=http.get(f'/api/loops/{loop}/history').json()
                 assert revised['task']['status']=='RESULT_AVAILABLE' and revised['result']['report_version']==2
                 assert http.get(f"/api/evidence/{state['evidence']['id']}").json()['content']['note']=='合成培养报告'
+                # Injected model investigates only this rollback-only synthetic task.
+                child_state=http.get(f"/api/loops/{child['id']}/history").json()['task']
+                post(f"/agent/loops/{child['id']}/progress", {'doctor_id':1,'expected_version':child_state['version'],
+                    'request_key':'MODEL-NOTE-'+marker,'text':'已知晓本次药敏报告，等待进一步处理。'})
+                queued=post(f"/agent/loops/{child['id']}/runs", {'doctor_id':1,'expected_version':child_state['version'],'request_key':'MODEL-RUN-'+marker})
+                with Session(bind=connection,autoflush=False,join_transaction_mode='create_savepoint') as model_db:
+                    outcome=process_agent_once(model_db,TestModel('note_found'),job_id=queued['job_id'])
+                    assert outcome['stop_reason']=='CANDIDATE_READY',outcome
+                investigation=http.get(f"/api/agent/loops/{child['id']}").json()
+                candidate=investigation['proposals'][0]
+                post(f"/agent/proposals/{candidate['id']}/review", {'doctor_id':1,'expected_version':candidate['version'],
+                    'expected_loop_version':investigation['loop_version'],'decision':'ACCEPT','effect':'CONFIRM_RESPONSE',
+                    'evidence_id':candidate['evidence_id'],'note':'PostgreSQL 合成验证，医生核对'})
+                assert http.get(f"/api/loops/{child['id']}/history").json()['task']['status']=='ACKNOWLEDGED'
+                feedback=http.get(f'/api/agent/feedback?encounter_id={encounter_id}').json()
+                assert any(item['loop_id']==child['id'] and item['state']=='reviewed' and not item['requires_attention'] for item in feedback['items'])
+                print('PASS PostgreSQL: injected model, real read tools, persisted candidate, versioned doctor response and trace; no online API call.')
                 print('PASS PostgreSQL: finish rounding with follow-ups preserved -> complete all four task types -> read persisted finish, task history and summary.')
                 print('PASS PostgreSQL: second rounding and note remain independent; patient history returns both sessions and records.')
                 print('PASS PostgreSQL: automatic report matching, separate finding review, version-specific acknowledgement, two event recoveries, dependent loop and immutable revisions.')
         finally:
+            agent_provider.configured = original_configured
             app.dependency_overrides.clear()
             transaction.rollback()
         assert counts() == before
