@@ -1,0 +1,145 @@
+{
+  "synthetic_only": true,
+  "draft": {
+    "sections": [
+      {
+        "heading": "主诉",
+        "text": "咳嗽3天，伴少量白痰。",
+        "source_ids": [
+          "interview:synthetic:v1"
+        ],
+        "missing": false
+      },
+      {
+        "heading": "现病史",
+        "text": "患者自述咳嗽3天，伴少量白痰。医生询问有无发热时，患者表示未测量体温，故发热情况待核实。其余起病经过、伴随症状、诊疗经过等未提供，待医生补充。",
+        "source_ids": [
+          "interview:synthetic:v1"
+        ],
+        "missing": true
+      },
+      {
+        "heading": "既往史",
+        "text": "未提供。问诊记录中医生指出既往病史和过敏史还需要进一步核实，待医生补充。",
+        "source_ids": [
+          "interview:synthetic:v1"
+        ],
+        "missing": true
+      },
+      {
+        "heading": "个人史",
+        "text": "未提供，待医生补充。",
+        "source_ids": [],
+        "missing": true
+      },
+      {
+        "heading": "婚育史",
+        "text": "未提供，待医生补充。",
+        "source_ids": [],
+        "missing": true
+      },
+      {
+        "heading": "家族史",
+        "text": "未提供，待医生补充。",
+        "source_ids": [],
+        "missing": true
+      },
+      {
+        "heading": "体格检查",
+        "text": "未提供。问诊记录载明暂未完成体格检查，待医生补充。",
+        "source_ids": [
+          "interview:synthetic:v1"
+        ],
+        "missing": true
+      },
+      {
+        "heading": "辅助检查",
+        "text": "合成检查报告：血常规（2026-10-26 02:00），白细胞计数12.0×10^9/L；报告注明未提供其他项目结果。",
+        "source_ids": [
+          "lab:synthetic:v1"
+        ],
+        "missing": true
+      },
+      {
+        "heading": "初步诊断",
+        "text": "未提供。问诊记录载明初步诊断尚待明确，待医生补充。",
+        "source_ids": [
+          "interview:synthetic:v1"
+        ],
+        "missing": true
+      }
+    ],
+    "missing_sections": [
+      "现病史",
+      "既往史",
+      "个人史",
+      "婚育史",
+      "家族史",
+      "体格检查",
+      "辅助检查",
+      "初步诊断"
+    ],
+    "provider": "deepseek",
+    "model": "deepseek-flash"
+  },
+  "trace": [
+    {
+      "step": 1,
+      "action": "call_tool",
+      "tool_name": "read_patient_profile",
+      "source_ids": [
+        "profile:synthetic:1"
+      ]
+    },
+    {
+      "step": 2,
+      "action": "call_tool",
+      "tool_name": "read_interview",
+      "source_ids": [
+        "interview:synthetic:v1"
+      ]
+    },
+    {
+      "step": 3,
+      "action": "call_tool",
+      "tool_name": "read_examinations",
+      "source_ids": [
+        "lab:synthetic:v1"
+      ]
+    },
+    {
+      "step": 4,
+      "action": "submit_draft",
+      "tool_name": null
+    }
+  ],
+  "sources": {
+    "read_patient_profile": [
+      {
+        "id": "profile:synthetic:1",
+        "data": {
+          "name": "合成入院测试患者",
+          "gender": "女",
+          "age": 45,
+          "admitted_at": "2026-10-26T01:00:00+00:00",
+          "history_reporter": "患者本人"
+        }
+      }
+    ],
+    "read_interview": [
+      {
+        "id": "interview:synthetic:v1",
+        "text": "【以下完全为合成测试】医生：哪里不舒服，多久了？患者：咳嗽3天，伴少量白痰。医生：有发热吗？患者：没有测量体温。医生：既往病史和过敏史还需要进一步核实。医生：暂未完成体格检查，初步诊断尚待明确。"
+      }
+    ],
+    "read_examinations": [
+      {
+        "id": "lab:synthetic:v1",
+        "kind": "合成检查报告",
+        "test_name": "血常规",
+        "reported_at": "2026-10-26T02:00:00+00:00",
+        "text": "【合成测试】白细胞计数12.0×10^9/L。未提供其他项目结果。"
+      }
+    ]
+  }
+}

@@ -67,3 +67,12 @@ python -m backend.worker.main --poll-interval 1
 新增 API：`POST /api/loops/{id}/matching`、`GET /api/findings`、`POST /api/findings/{id}/reviews`、`GET /api/evidence/{id}`、`GET /api/loops/{id}/runs`、`POST /api/loops/{id}/follow-up`、`GET /api/event-jobs` 和开发重试 `POST /api/event-jobs/{id}/retry`。医生写操作使用期望版本；提醒审核与后续任务提交还使用稳定幂等标识。自动报告的 acknowledge 必须提交当前 evidence_id，旧报告不能确认新版本。
 
 报告事件仅核对结构化身份和版本，不代表临床正确性判断，也不覆盖医院全部病程来源。详细页面步骤和验证命令见根目录 README。
+
+
+## Agent A02～A07
+
+新增独立 AgentJob/AgentProposal（迁移 0005）；Worker 完成临床事件持久化及规则核验后，处理已启用目标的模型调查。网络请求期间不持有临床写锁，提交候选前重新核对版本及实际证据。模型失败不会回退冒充成功。
+
+DeepSeek 配置、/api/agent 接口、前端操作与隔离在线验收见 [Agent 模块说明](../agent/README.md)。当前 110 项自动检查、浏览器及 PostgreSQL 验证通过（模型流程使用注入测试模型）；三类真实 DeepSeek 合成调查另已通过。配置后需重启 API 和 Worker。
+
+患者资料与入院Agent另有0006、0007增量迁移，当前部署请运行 `python -m alembic upgrade head` 至0007。入院Agent的问诊、检查、草稿及审查签署流程见根目录README与agent/README.md；API进程必须能够访问已配置的DeepSeek服务。

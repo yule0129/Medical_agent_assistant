@@ -20,6 +20,8 @@ from .routes.records import router as records_router
 from .routes.timeline import router as timeline_router
 from .routes.tasks import router as tasks_router
 from .routes.reports import router as reports_router
+from .routes.patients import router as patients_router
+from agent.api.router import router as agent_router
 from .services.intent_service import require_scope
 from .services.rounding_service import rounding_summary
 
@@ -96,12 +98,14 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.include_router(patients_router)
 app.include_router(events_router)
 app.include_router(intents_router)
 app.include_router(workflow_router)
 app.include_router(rounding_router)
 app.include_router(records_router)
 app.include_router(timeline_router)
+app.include_router(agent_router)
 app.include_router(reports_router)
 app.include_router(tasks_router)
 
@@ -210,10 +214,20 @@ def update_record(record_id: int, payload: RecordUpdate, db: Session = Depends(g
 
 
 @app.post("/api/medical-records/{record_id}/sign", response_model=RecordOut)
-def sign_record(record_id: int, db: Session = Depends(get_db)):
+def sign_record(record_id: int, doctor_id: int = 1, db: Session = Depends(get_db)):
     record = db.get(MedicalRecord, record_id)
     if not record:
         raise HTTPException(status_code=404, detail="medical record not found")
+    if record.record_type in {"入院记录", "再次或多次入院记录"}:
+        from agent.admission.service import assert_reviewable, workspace_for
+        try:
+            require_scope(db, record.encounter_id, doctor_id)
+        except ValueError as exc:
+            raise HTTPException(403, str(exc)) from exc
+        workspace = workspace_for(db, record.encounter_id)
+        if workspace and workspace.draft:
+            raise HTTPException(409, "Agent入院草稿请进入入院记录页，核对资料与当前版本后审查签署")
+        assert_reviewable(db, record, doctor_id)
     record.status = "已签署"
     record.signed_at = utc_now()
     db.commit()

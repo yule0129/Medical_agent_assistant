@@ -26,7 +26,7 @@ def process_job(db: Session, job: EventJob) -> dict[str, object]:
             raise RuntimeError("report lookup failed")
         job.status, job.lease_until, job.last_error, job.retry_at = JobStatus.SUCCEEDED, None, None, None
         return {"event_id": event.id, "status": "SUCCEEDED", "resumed": outcomes}
-    intents = create_candidates(db, event) if event.event_type in {"NOTE_CREATED", "PROGRESS_NOTE_CREATED"} else []
+    intents = create_candidates(db, event) if event.event_type in {"NOTE_CREATED", "PROGRESS_NOTE_CREATED"} and event.source != "doctor_progress" else []
     registry = build_default_registry()
     outputs: list[dict[str, object]] = []
     for intent in intents:
@@ -68,6 +68,8 @@ def run_job(db: Session, job_id: int, *, raise_errors=False):
     attempt = job.attempt + 1
     try:
         result = process_job(db, job)
+        from agent.runtime.events import enqueue_event
+        enqueue_event(db, db.get(ClinicalEvent, job.event_id))
         db.commit()
         return result
     except Exception as exc:

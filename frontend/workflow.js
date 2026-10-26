@@ -30,11 +30,11 @@ function recordTable(list) {
 async function saveMedicalRecord(id) {
   try {
     await workflowFetch('/medical-records/'+id,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({content:document.getElementById('recordEditor').value})});
-    await openMedicalRecord(id,activeRecordHistory); showToast('病历修改已保存到数据库');
+    await openMedicalRecord(id,activeRecordHistory); await refreshDashboardTotals(); showToast('病历修改已保存到数据库');
   }catch(error){showToast('保存失败：'+error.message);}
 }
 async function signMedicalRecord(id) {
-  try {await postWorkflow('/medical-records/'+id+'/sign',{}); await openMedicalRecord(id,activeRecordHistory);showToast('模拟签署已保存');}
+  try {await postWorkflow('/medical-records/'+id+'/sign',{}); await openMedicalRecord(id,activeRecordHistory);await refreshDashboardTotals();showToast('模拟签署已保存');}
   catch(error){showToast('签署失败：'+error.message);}
 }
 
@@ -54,16 +54,20 @@ async function loadBackendPatients() {
 }
 async function refreshDashboardTotals() {
   try {
-    const [records,tasks]=await Promise.all([workflowFetch('/medical-records'),workflowFetch('/tasks?doctor_id=1')]);
+    const [records,tasks]=await Promise.all([workflowFetch('/medical-records'),loadDoctorTasks()]);
     const pendingRecords=document.getElementById('pendingRecordTotal');if(pendingRecords)pendingRecords.textContent=records.filter(r=>r.status!=='已签署').length;
     const pendingTasks=document.getElementById('pendingTaskTotal');if(pendingTasks)pendingTasks.textContent=tasks.filter(t=>!['RESOLVED','CANCELLED','REJECTED'].includes(t.status)).length;
     const open=tasks.filter(t=>!['RESOLVED','CANCELLED','REJECTED'].includes(t.status));
     const reminders=document.getElementById('homeReminders');
     if(reminders)reminders.innerHTML=(patients.filter(p=>p.status==='待结束').map(p=>`<div class="alert" onclick="currentEncounterId=${p.encounterId};currentRoundingId=${p.latestRoundingId};openWorkflowPanel()"><div><b>${html(p.name)}</b><br/>本次查房已保存，等待结束。</div></div>`).join(''))+
-      open.slice(0,3).map(t=>`<div class="alert" onclick="openTaskDetail(${t.id})"><div><b>${html(t.patient)}</b><br/>待办：${html(t.waiting_for)}</div></div>`).join('')+
+      open.slice(0,5).map(t=>`<div class="alert" onclick="${t.intent_type==='ADMISSION_RECORD'?`openAdmissionRecord(${t.patient_id},${t.encounter_id})`:`openTaskDetail(${t.id})`}"><div><b>${html(t.patient)}</b><br/>${t.overdue?'⚠ 已逾期 · ':''}待办：${html(t.waiting_for)}${t.intent_type==='ADMISSION_RECORD'?`<br/>截止：${html(localTime(t.due_at))}`:''}</div></div>`).join('')+
       (records.some(r=>r.status!=='已签署')?'<div class="alert" onclick="openRecordList()">有病历待审核；审核签署与查房结束分别处理。</div>':'')||'<p class="section-note" style="padding:0 20px">当前没有待处理事项。</p>';
     const count=document.getElementById('homeReminderCount');if(count)count.textContent=(open.length+patients.filter(p=>p.status==='待结束').length+records.filter(r=>r.status!=='已签署').length)+' 项';
   }catch(error){console.warn('工作台统计读取失败',error.message);}
+}
+async function loadDoctorTasks() {
+  const [clinical,admission]=await Promise.all([workflowFetch('/tasks?doctor_id=1'),workflowFetch('/admission-tasks?doctor_id=1')]);
+  return [...clinical,...admission].sort((a,b)=>(a.due_at?Date.parse(a.due_at):Infinity)-(b.due_at?Date.parse(b.due_at):Infinity));
 }
 
 async function selectPatient(name) {
@@ -170,7 +174,11 @@ async function openMedicalRecord(id, historyContext=null) {
     document.getElementById('recordTextView').textContent=r.content;
     document.getElementById('recordEditor').value=r.content;
     document.getElementById('backToRecordHistory').onclick=()=>openPatientHistory(historyContext?.patientId||r.patient_id,historyContext?.encounterId||null);
-    const sign=document.getElementById('signRecordButton'); if(sign)sign.onclick=()=>signMedicalRecord(r.id);
+    const sign=document.getElementById('signRecordButton'); if(sign){
+      const admission=['入院记录','再次或多次入院记录'].includes(r.record_type)&&r.encounter_id;
+      sign.textContent=admission?'进入入院记录审查':'审核并模拟签署';
+      sign.onclick=()=>admission?openAdmissionRecord(r.patient_id,r.encounter_id):signMedicalRecord(r.id);
+    }
     const action=document.getElementById('panelAction'); action.disabled=false;action.textContent=r.status==='已签署'?'返回历史病历':'编辑病历'; action.onclick=()=>r.status==='已签署'?openPatientHistory(historyContext?.patientId||r.patient_id,historyContext?.encounterId||null):editMedicalRecord(r.id);
     document.getElementById('panelModal').classList.add('show');
   } catch(error) { showToast('病历读取失败：'+error.message); }
@@ -196,10 +204,12 @@ function candidateHtml(item) {
     <button class="primary" onclick="confirmWorkflowIntent(${item.id})">确认并加入任务安排</button></p><input id="ignoreReason-${item.id}" placeholder="如需忽略，请填写原因" /> <button class="secondary" onclick="rejectWorkflowIntent(${item.id})">忽略</button><p id="candidateError-${item.id}" role="alert" style="color:#b42318"></p></div></div>`;
 }
 function taskHtml(item) {
+  if(item.intent_type==='ADMISSION_RECORD')return `<div class="workflow-item" data-admission-task="${item.encounter_id}"><div><b>${html(item.patient)} · 审查入院记录</b> <span class="tag ${item.status==='RESOLVED'?'green':'orange'}">${item.status==='RESOLVED'?'已审查签署':item.overdue?'已逾期':item.draft_ready?'待审查':'待生成草稿'}</span><p>截止：${html(localTime(item.due_at))} · 入院后24小时</p><p>${html(item.state_reason)}</p><button class="primary" onclick="openAdmissionRecord(${item.patient_id},${item.encounter_id})">${item.status==='RESOLVED'?'查看入院记录':item.draft_ready?'去审查':'补充问诊／生成草稿'}</button></div></div>`;
   const overdue=item.due_at && new Date(item.due_at)<new Date() && !['RESOLVED','CANCELLED'].includes(item.status);
   const simple=['ACTION','MONITOR'].includes(item.intent_type);
   const status=item.status==='WAITING_EVENT'&&simple?'<span class="tag orange">待执行</span>':workflowStatusTag(item.status);
   return `<div class="workflow-item" data-task-id="${item.id}"><div><b>${html(item.patient)} · ${html(taskType(item.intent_type))}：${html(item.waiting_for)}</b> ${status}
+    <div data-agent-task-summary="${item.id}">${agentTaskSummaryHtml(item.id)}</div>
     <p>计划：${html(localTime(item.due_at))} ${overdue?'<span class="tag orange">已逾期</span>':''}</p><small>任务 #${item.id} · ${html(item.state_reason)}</small>
     ${item.status==='RESOLVED'?`<p>完成时间：${html(localTime(item.completed_at))}</p>`:`<p>下一步：${simple?'填写实际执行情况并完成任务':item.status==='WAITING_EVENT'?'登记实际检验结果':item.status==='RESULT_AVAILABLE'?'确认已查看结果':'填写处理结论并完成'}</p>`}
     <p><button class="primary" onclick="openTaskDetail(${item.id})">查看／处理</button> ${item.record_id?`<button class="secondary" onclick="openMedicalRecord(${item.record_id})">来源病历</button>`:''}</p></div></div>`;
@@ -263,7 +273,8 @@ async function openTaskSchedule(filter) {
   const button=document.getElementById('panelAction'); button.disabled=false;button.textContent='刷新任务'; button.onclick=openTaskSchedule;
   document.getElementById('panelModal').classList.add('show');
   try {
-    workflowTasks=await workflowFetch('/tasks?doctor_id=1');
+    workflowTasks=await loadDoctorTasks();
+    await refreshAgentFeedback(false);
     const done=workflowTasks.filter(t=>t.status==='RESOLVED').length;
     const pending=workflowTasks.filter(t=>!['RESOLVED','CANCELLED','REJECTED'].includes(t.status)).length;
     const shown=workflowTasks.filter(t=>scheduleFilter==='all'||(scheduleFilter==='completed'?t.status==='RESOLVED':scheduleFilter==='cancelled'?t.status==='CANCELLED':!['RESOLVED','CANCELLED','REJECTED'].includes(t.status)));
@@ -313,11 +324,13 @@ async function openHandoff() {
   document.getElementById('panelBody').textContent='正在生成...';
   document.getElementById('panelModal').classList.add('show');
   const button=document.getElementById('panelAction');button.textContent='返回工作流';button.onclick=openWorkflowPanel;
-  try {const data=await postWorkflow(`/encounters/${currentEncounterId}/handoffs`,{doctor_id:1});const pre=document.createElement('div');pre.className='record-text';pre.textContent=data.content;document.getElementById('panelBody').replaceChildren(pre);for(const ref of data.references||[]){if(ref.loop_id){const link=document.createElement('button');link.className='secondary';link.textContent='打开待办任务 #'+ref.loop_id+(ref.evidence_id?'（含报告证据）':'');link.onclick=()=>openTaskDetail(ref.loop_id);document.getElementById('panelBody').append(link);}}showToast('交班草稿 #'+data.id+' 已保存');}catch(error){document.getElementById('panelBody').textContent='生成失败：'+error.message;}
+  await openAgentHandoff(currentEncounterId);
 }
 
 (async function initializeWorkflow() {
   medicalRecords.splice(0); // Records are always loaded from the API.
-  try {await loadBackendPatients(); await refreshWorkflow(); await refreshDashboardTotals();}
+  try {await loadBackendPatients(); await refreshWorkflow(); await refreshDashboardTotals(); await refreshAgentFeedback(false);}
   catch(error){document.getElementById('homeWorkflowStatus').textContent='连接失败';showToast('请启动后端后重试');}
 })();
+// Recalculate admission deadlines from the server without replacing an open editor.
+setInterval(()=>{if(document.visibilityState==='visible')refreshDashboardTotals();},60000);
