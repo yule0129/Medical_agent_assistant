@@ -194,14 +194,17 @@ def create_handoff(encounter_id: int, payload: HandoffCreate, db: Session = Depe
         if t['parent_loop_id']:
             parent = db.get(OpenLoop, t['parent_loop_id'])
             lines.append(f"  前序任务 #{parent.id}：{parent.waiting_for} · {parent.status}；本次仍需跟进 {t['waiting_for']}")
+    from agent.patient_memory.actions.handoff import memory_handoff
+    matter_lines,matter_refs=memory_handoff(db,encounter_id)
+    lines.extend(matter_lines)
     content = "未完成任务交班草稿\n" + "\n".join(lines)
     content += "\n" + "\n".join(f"待确认意图 #{c.id}：{c.raw_text}" for c in candidates)
-    if not pending and not candidates:
+    if not pending and not candidates and not matter_refs:
         content += "\n当前没有未完成任务或待确认计划。"
     report = HandoffReport(encounter_id=encounter_id, doctor_id=payload.doctor_id, content=content,
         created_at=datetime.now(timezone.utc), references=[{"loop_id": t["id"], "version": t["version"], **({"evidence_id": t["current_evidence_id"]} if t["current_evidence_id"] else {}),
             **({"parent_loop_id": t["parent_loop_id"], "parent_version": db.get(OpenLoop, t["parent_loop_id"]).version,
-                "parent_evidence_id": db.get(OpenLoop, t["parent_loop_id"]).current_evidence_id} if t["parent_loop_id"] else {})} for t in pending] + [{"intent_id": c.id} for c in candidates])
+                "parent_evidence_id": db.get(OpenLoop, t["parent_loop_id"]).current_evidence_id} if t["parent_loop_id"] else {})} for t in pending] + [{"intent_id": c.id} for c in candidates]+matter_refs)
     db.add(report)
     db.commit()
     return {"id": report.id, "content": report.content, "status": report.status, "references": report.references}

@@ -21,6 +21,7 @@ function patientTabs(patientId,active,encounterId=null,admissionEncounterId=enco
   return `<nav class="patient-tabs" role="tablist" aria-label="患者资料">
     <button class="patient-tab ${active==='basic'?'active':''}" role="tab" aria-selected="${active==='basic'}" id="patientBasicTab" onclick="openPatientDetailById(${patientId},${basicEncounter})">基本信息</button>
     <button class="patient-tab ${active==='admission'?'active':''}" role="tab" aria-selected="${active==='admission'}" id="patientAdmissionTab" onclick="openAdmissionRecord(${patientId},${admissionEncounterId||'null'})">入院记录</button>
+    <button class="patient-tab ${active==='matters'?'active':''}" role="tab" aria-selected="${active==='matters'}" id="patientMattersTab" onclick="openPatientMatters(${patientId},${admissionEncounterId||'null'})">待跟进事项</button>
     <button class="patient-tab ${active==='records'?'active':''}" role="tab" aria-selected="${active==='records'}" id="patientHistoryButton" onclick="openPatientHistory(${patientId},${basicEncounter},'records')">历史病历</button>
     <button class="patient-tab ${active==='roundings'?'active':''}" role="tab" aria-selected="${active==='roundings'}" id="patientRoundingsTab" onclick="openPatientHistory(${patientId},${basicEncounter},'roundings')">查房记录</button>
   </nav>`;
@@ -60,9 +61,11 @@ async function openPatientDetailById(id,encounterId=null) {
 function startNewRounding(patientId) {
   const p=patients.find(p=>p.backendPatientId===patientId);
   if(!p){showToast('当前没有该患者的可用住院记录');return;}
-  closePanel();selectPatient(p.name);
+  openBedsideRounding(patientId,p.encounterId,null,true);
 }
-function continueRounding(roundId, encounterId, patientId=null) {
+async function continueRounding(roundId, encounterId, patientId=null) {
+  try{const r=await workflowFetch(`/rounding-sessions/${roundId}?doctor_id=1`);if(r.record_mode==='TRANSCRIPT'){await openBedsideRounding(patientId||workflowPatientId,encounterId,roundId);return;}}catch(error){showToast(error.message);return;}
+
   currentEncounterId=encounterId;currentRoundingId=roundId;workflowPatientId=patientId||patients.find(p=>p.encounterId===encounterId)?.backendPatientId||historyPatientId;openWorkflowPanel();
 }
 async function openPatientHistory(patientId, encounterId=null, view='records') {
@@ -90,8 +93,8 @@ async function openPatientHistory(patientId, encounterId=null, view='records') {
         <p>${html(localTime(r.created_at))} · ${html(r.author)}</p><small>${html(r.encounter_number||'未关联住院')} · ${html(r.record_number)}${r.source_rounding_session_id?' · 查房 #'+r.source_rounding_session_id:''}</small>
         <p>${html(r.preview)}</p><button class="primary" onclick="openMedicalRecord(${r.id},{patientId:${patientId},encounterId:${encounterId||'null'}})">查看病历正文</button></div></div>`).join('')||'<p>该范围内暂无病历。</p>'}</div></section>
       <section id="historyRoundingsSection" ${selectedView==='roundings'?'':'hidden'}><h3>历次查房（${data.roundings.length}）</h3><div class="detail-list" id="historyRoundings">${data.roundings.map(r=>`<div class="workflow-item" data-history-rounding="${r.id}"><div><b>查房 #${r.id} · ${html(localTime(r.started_at))}</b> <span class="tag ${r.status==='COMPLETED'?'green':'orange'}">${r.status==='COMPLETED'?'已结束':r.status==='DRAFT'?'草稿':'待结束'}</span>
-        <p>${html(r.encounter_number)}</p><p>候选待处理 ${r.candidate_count} · 后续待办 ${r.open_task_count} · 已完成 ${r.completed_task_count}</p>
-        <button class="secondary" onclick="openRoundingHistory(${r.id},${patientId},${encounterId||'null'})">查看查房原文</button> <button class="secondary" onclick="continueRounding(${r.id},${r.encounter_id},${patientId})">查看关联任务／继续处理</button></div></div>`).join('')||'<p>该范围内暂无查房记录。</p>'}</div></section></div>`;
+        <p>${html(r.encounter_number)}</p><p>${r.record_mode==='TRANSCRIPT'?'查房问诊原文 · 无需总结审查':`候选待处理 ${r.candidate_count} · 后续待办 ${r.open_task_count} · 已完成 ${r.completed_task_count}`}</p>
+        <button class="secondary" onclick="openRoundingHistory(${r.id},${patientId},${encounterId||'null'})">查看查房原文</button> <button class="secondary" onclick="continueRounding(${r.id},${r.encounter_id},${patientId})">${r.record_mode==='TRANSCRIPT'?'查看／继续查房':'查看关联任务／继续处理'}</button></div></div>`).join('')||'<p>该范围内暂无查房记录。</p>'}</div></section></div>`;
   }catch(error){if(request===historyRequest&&container===document.getElementById('patientHistoryList')){container.textContent='历史读取失败：'+error.message;const retry=document.createElement('button');retry.className='secondary';retry.textContent='重试';retry.onclick=()=>openPatientHistory(patientId,encounterId,selectedView);container.append(retry);}}
 }
 async function openRoundingHistory(roundId, patientId, encounterId=null) {
@@ -102,6 +105,7 @@ async function openRoundingHistory(roundId, patientId, encounterId=null) {
   try {
     const r=await workflowFetch(`/rounding-sessions/${roundId}?doctor_id=1`);
     if(container!==document.getElementById('historicalRound'))return;
+    if(r.record_mode==='TRANSCRIPT'){await openBedsideRounding(patientId,r.encounter_id,roundId);return;}
     document.getElementById('panelSub').textContent=localTime(r.started_at)+' · '+(r.status==='COMPLETED'?'已结束':'待结束');
     container.innerHTML=`<h3>原始查房记录</h3><div class="record-text" id="historicalTranscript"></div><h3>保存时的病历草稿</h3><div class="record-text" id="historicalDraft"></div><p class="section-note">下方草稿为查房保存时的内容，医生后续编辑及签署后的文书请打开对应病历查看。</p><p>
       ${r.record_id?`<button class="primary" onclick="openMedicalRecord(${r.record_id},{patientId:${patientId},encounterId:${encounterId||'null'}})">查看对应病历</button>`:''} <button class="secondary" onclick="continueRounding(${r.id},${r.encounter_id},${patientId})">查看关联任务／继续处理</button></p>`;

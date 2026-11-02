@@ -81,6 +81,7 @@ async function openAdmissionRecord(patientId,encounterId=null){
       <details id="admissionTrace"><summary>Agent工作过程与草稿来源</summary>${data.agent.trace.map(t=>`<p>${t.step} · ${html(t.action)} ${html(t.tool_name||'')} ${html((t.source_ids||[]).join('、'))}</p>`).join('')||'<p>尚无Agent生成记录。</p>'}
       ${(data.agent.draft.sections||[]).map(s=>`<p><b>${html(s.heading)}</b> · 来源：${html(s.source_ids.join('、')||'未提供')} ${s.missing?'· 待补充':''}</p>`).join('')}
       ${data.agent.error_code?`<p>生成状态：${html(data.agent.error_code)}</p>`:''}</details>
+      ${data.agent.input_version?`<button class="secondary" onclick="openSavedSourceMatters(${patientId},${profile.encounter_id},'ADMISSION',null)">查看问诊中的待跟进事项</button>`:''}
       <p id="admissionError" role="alert" style="color:#b42318"></p><button class="secondary" onclick="openTaskSchedule()">返回任务安排</button>`;
     document.getElementById('admissionTranscript').value=data.agent.transcript;
     document.getElementById('admissionExams').value=data.agent.examination_text;

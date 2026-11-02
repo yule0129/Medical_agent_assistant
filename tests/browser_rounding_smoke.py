@@ -9,14 +9,14 @@ import sys
 import threading
 import time
 import tempfile
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from urllib.request import urlopen
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import uvicorn
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 from websockets.sync.client import connect
 
@@ -29,6 +29,11 @@ from backend.worker.processor import run_once
 from test_agent_runtime import TestModel
 from test_admission_agent import AdmissionTestModel
 from agent.admission import service as admission_service
+from agent.patient_memory import service as matter_service
+from test_patient_matters import TestMatterModel
+from test_matter_progress import ProgressTestModel
+from test_matter_actions import ActionTestModel
+from agent.patient_memory.progress import runtime as progress_runtime
 
 
 def main():
@@ -39,6 +44,8 @@ def main():
     original_admission_configured,original_admission_provider=admission_service.configured,admission_service.get_provider
     admission_service.configured=lambda:True
     admission_service.get_provider=lambda:AdmissionTestModel()
+    original_matter_configured,original_matter_provider=matter_service.configured,matter_service.get_provider
+    matter_model=TestMatterModel();matter_service.configured=lambda:True;matter_service.get_provider=lambda:matter_model
     temporary = tempfile.TemporaryDirectory(prefix='health-agent-browser-')
     engine = create_engine('sqlite:///' + str(Path(temporary.name) / 'workflow.sqlite'), connect_args={'check_same_thread': False})
     Base.metadata.create_all(engine)
@@ -225,7 +232,7 @@ def main():
             js(f'openMedicalRecord({record_id})')
             wait("document.getElementById('recordTextView')?.textContent.includes('明天复查血常规')")
             js('openTaskSchedule()')
-            wait("document.getElementById('panelBody').textContent.includes('待办 0 个 · 已完成 5 个')")
+            wait("document.getElementById('panelBody').textContent.includes('待办 0 个 · 已完成 6 个')")
             assert js("document.querySelectorAll('[data-task-id]').length===0")
             js("document.getElementById('taskFilter').value='completed';document.getElementById('taskFilter').dispatchEvent(new Event('change'))")
             wait("document.querySelectorAll('[data-task-id]').length===4")
@@ -242,7 +249,7 @@ def main():
             js("document.getElementById('patientHistoryButton').click()")
             wait("document.querySelectorAll('[data-history-record]').length===2")
             assert js("document.querySelectorAll('#historyEncounter option').length===3")
-            js("document.getElementById('panelAction').click()")
+            js("selectPatient(patients[0].name)")
             wait("document.getElementById('roundModal').classList.contains('show')")
             assert js("document.getElementById('roundTranscript').value===''")
             js("document.getElementById('roundTranscript').value='午后再次查房，患者自诉好转。';document.getElementById('generateBtn').click();document.getElementById('generateBtn').click()")
@@ -277,7 +284,7 @@ def main():
             assert js(f"document.querySelector('[data-history-rounding=\"{round_id}\"]').textContent.includes('已结束')")
             assert js(f"document.querySelector('[data-history-rounding=\"{second_round_id}\"]').textContent.includes('待结束')")
             # Automatic event recovery, independent review and a dependent loop.
-            js('startNewRounding(1)')
+            js("selectPatient(patients[0].name)")
             wait("document.getElementById('roundModal').classList.contains('show')")
             js("document.getElementById('roundTranscript').value='血培养结果出来后通知我';document.getElementById('generateBtn').click();document.getElementById('generateBtn').click()")
             wait("document.querySelectorAll('#workflowIntents [data-intent-id]').length===1")
@@ -350,10 +357,122 @@ def main():
             js(f'openTaskDetail({child_loop})')
             wait("document.getElementById('agentPanelContent')?.textContent.includes('ACCEPTED')")
             assert js('window.reportInjected===undefined')
+            # New bedside flow: pending -> editable raw transcript -> explicit completion, no model/note side effects.
+            from sqlalchemy import func
+            from backend.models import MedicalRecord, ClinicalEvent
+            with Session(engine) as db:
+                db.add(Patient(id=2,name='合成床旁患者',admission_number='BEDSIDE-2',bed_number='02床',diagnosis='测试',doctor_id=1))
+                db.flush()
+                db.add(Encounter(id=3,encounter_number='BEDSIDE-ENC',patient_id=2,attending_doctor_id=1,admitted_at=datetime.now(timezone.utc)-timedelta(hours=1)))
+                db.commit()
+                record_count=db.scalar(select(func.count()).select_from(MedicalRecord))
+                event_count=db.scalar(select(func.count()).select_from(ClinicalEvent))
+            js('loadBackendPatients()')
+            js("openTaskSchedule('pending')")
+            wait("document.querySelector('[data-rounding-task=\"3\"]')!==null")
+            js("document.querySelector('[data-rounding-task=\"3\"] .primary').click()")
+            wait("document.getElementById('bedsideTranscript')!==null")
+            js("document.getElementById('panelAction').click()")
+            assert js("document.getElementById('bedsideError').textContent.includes('问诊')")
+            js("document.getElementById('bedsideTranscript').value='医生：今天如何？患者：咳嗽少了。医生：药物过敏史还需向女儿核实。明天复查血常规。请联系心内科会诊。<img src=x onerror=window.bedsideInjected=true>';document.getElementById('saveBedsideDraft').click()")
+            wait("!bedsideSaving && document.getElementById('bedsideStatus')?.textContent.includes('暂存')")
+            bedside_id=js('bedsideView.row.id')
+            js("openTaskSchedule('pending')")
+            wait("document.querySelector('[data-rounding-task=\"3\"]')!==null")
+            js("document.querySelector('[data-rounding-task=\"3\"] .primary').click()")
+            wait("document.getElementById('bedsideTranscript')?.value.includes('咳嗽少了')")
+            js("document.getElementById('bedsideTranscript').value+='医生核对后的文字';document.getElementById('panelAction').click()")
+            wait("!bedsideSaving && document.getElementById('bedsideStatus')?.textContent.includes('已完成')")
+            assert js("document.getElementById('bedsideTranscript').readOnly && !document.getElementById('admissionReviewConfirmed')")
+            assert not js('window.bedsideInjected===true')
+            js("openTaskSchedule('pending')")
+            wait("document.getElementById('taskFilter')?.value==='pending'")
+            assert js("document.querySelector('[data-rounding-task=\"3\"]')===null")
+            js("openPatientHistory(2,3,'roundings')")
+            wait(f"document.querySelector('[data-history-rounding=\"{bedside_id}\"]')!==null")
+            js(f"document.querySelector('[data-history-rounding=\"{bedside_id}\"] .secondary').click()")
+            wait("document.getElementById('bedsideTranscript')?.value.includes('医生核对后的文字')")
+            with Session(engine) as db:
+                assert db.scalar(select(func.count()).select_from(MedicalRecord))==record_count
+                assert db.scalar(select(func.count()).select_from(ClinicalEvent))==event_count
+            print('PASS: 48-hour bedside task, raw transcript edit/save/reopen/complete/history; no generated medical record, clinical event or Agent summary.')
+            # Patient memory: grounded proposals -> clinician confirmation -> task -> manual completion.
+            js("document.getElementById('bedsideMattersButton').click()")
+            wait("document.getElementById('scanPatientMatters')!==null")
+            js("document.getElementById('scanPatientMatters').click()")
+            wait("document.querySelectorAll('[data-patient-matter]').length===3 && !matterBusy")
+            assert not js('window.bedsideInjected===true')
+            js("document.getElementById('scanPatientMatters').click()")
+            wait("!matterBusy && document.querySelectorAll('[data-patient-matter]').length===3")
+            assert matter_model.calls==1
+            memory_id=js('matterView.data.items[0].id')
+            js(f"document.getElementById('matterTitle-{memory_id}').value='医生核对后的跟进计划';reviewPatientMatter({memory_id},'CONFIRM')")
+            wait("!matterBusy && matterView.data.items.some(i=>i.status==='OPEN')")
+            js("openTaskSchedule('pending')")
+            wait(f"document.querySelector('[data-matter-task=\"{memory_id}\"]')!==null")
+            js(f"document.querySelector('[data-matter-task=\"{memory_id}\"] .primary').click()")
+            wait("document.getElementById('patientMatterCards')!==null")
+            assert js(f"document.getElementById('matterTitle-{memory_id}').value==='医生核对后的跟进计划'")
+            with Session(engine,autoflush=False) as db:
+                progress_runtime.schedule(db);progress_runtime.process_once(db,ProgressTestModel())
+            js('refreshMatterProgress()')
+            wait(f"document.getElementById('matterProgress-{memory_id}')?.textContent.includes('仍在等待')")
+            js(f"document.getElementById('matterNote-{memory_id}').value='未提交的医生记录'")
+            with Session(engine) as db:
+                db.add(__import__('backend.models',fromlist=['RoundingSession']).RoundingSession(encounter_id=3,doctor_id=1,
+                    started_at=datetime.now(timezone.utc),transcript='医生：原计划改为明天下午联系心内科会诊。',record_mode='TRANSCRIPT',status='DRAFT'))
+                db.commit()
+            with Session(engine,autoflush=False) as db:
+                progress_runtime.schedule(db);progress_runtime.process_once(db,ActionTestModel())
+            wait(f"document.getElementById('matterProgress-{memory_id}')?.textContent.includes('计划可能已变化')")
+            assert js(f"document.getElementById('matterNote-{memory_id}').value==='未提交的医生记录'")
+            assert js("document.getElementById('matterProgressHome').textContent.includes('计划可能已变化')")
+            action_id=js("matterProgressFeed.items.find(i=>i.matter_id==="+str(memory_id)+").progress.actions.find(a=>a.status==='PROPOSED').id")
+            js(f"document.getElementById('actionNote-{action_id}').value='尚未提交的建议审核文字'")
+            js(f"[...document.querySelectorAll('#matterProgress-{memory_id} button')].find(b=>b.textContent==='标记已阅').click()")
+            wait(f"document.getElementById('matterProgress-{memory_id}')?.textContent.includes('医生已阅')")
+            assert js("matterView.data.items.find(i=>i.id==="+str(memory_id)+").status==='OPEN'")
+            assert js(f"document.getElementById('actionNote-{action_id}').value==='尚未提交的建议审核文字'")
+            js(f"document.getElementById('actionTitle-{action_id}').value='医生审定后的联系安排';reviewMatterAction({memory_id},{action_id},'APPROVE')")
+            wait(f"!matterActionBusy && document.getElementById('matterTitle-{memory_id}')?.value==='医生审定后的联系安排'")
+            assert js(f"document.querySelector('[data-matter-action=\"{action_id}\"]').textContent.includes('医生已批准并执行')")
+            js(f"document.getElementById('matterNote-{memory_id}').value='医生填写实际处理情况';reviewPatientMatter({memory_id},'COMPLETE')")
+            wait("!matterBusy && matterView.data.items.some(i=>i.status==='COMPLETED')")
+            js("openPatientMatters(2,3,'done')")
+            wait("document.getElementById('patientMatterCards')?.textContent.includes('医生填写实际处理情况')")
+            print('PASS: patient-matter source quotes, model scan caching, clinician edits/confirmation, formal task and manual completion.')
+            # A returned result proposes a linked follow-up; approval preserves its parent and handoff includes both.
+            js('openPatientMatters(2,3)')
+            wait("document.getElementById('patientMatterCards')!==null")
+            recheck_id=js("matterView.data.items.find(i=>i.kind==='RECHECK').id")
+            js(f"reviewPatientMatter({recheck_id},'CONFIRM')")
+            wait("!matterBusy && matterView.data.items.some(i=>i.kind==='RECHECK'&&i.status==='OPEN')")
+            with Session(engine) as db:
+                from backend.models import LabReport
+                now=datetime.now(timezone.utc)
+                event=ClinicalEvent(event_key='browser-matter-action-lab',event_type='LAB_RESULT_CREATED',patient_id=2,encounter_id=3,occurred_at=now,received_at=now,source='synthetic',payload={})
+                db.add(event);db.flush()
+                db.add(LabReport(event_id=event.id,patient_id=2,encounter_id=3,report_id='BROWSER-CBC',report_version=1,test_name='血常规',result_text='合成血常规结果',reported_at=now));db.commit()
+            with Session(engine,autoflush=False) as db:
+                progress_runtime.schedule(db);progress_runtime.process_once(db,ActionTestModel())
+            js('refreshMatterProgress()')
+            wait(f"document.getElementById('matterProgress-{recheck_id}')?.textContent.includes('新增关联后续事项')")
+            followup_action=js("matterProgressFeed.items.find(i=>i.matter_id==="+str(recheck_id)+").progress.actions.find(a=>a.status==='PROPOSED').id")
+            js(f"document.getElementById('actionNote-{followup_action}').value='医生核对报告后批准查看处理事项';reviewMatterAction({recheck_id},{followup_action},'APPROVE')")
+            wait("!matterActionBusy && matterView.data.items.some(i=>i.parent_id!==null&&i.parent_id!==undefined)")
+            child_matter=js('matterView.data.items.find(i=>i.parent_id).id')
+            assert js("matterView.data.items.find(i=>i.id==="+str(recheck_id)+").status==='OPEN'")
+            js('openHandoff()')
+            wait("document.querySelector('[id^=handoffContent-]')!==null")
+            assert js("document.querySelector('[id^=handoffContent-]').value.includes('M#"+str(child_matter)+"') && document.querySelector('[id^=handoffContent-]').value.includes('前序事项')")
+            js("[...document.querySelectorAll('#panelBody button')].find(b=>b.textContent==='确认此交接快照').click()")
+            wait("document.getElementById('panelBody').textContent.includes('CONFIRMED')")
+            print('PASS: clinician-approved action revision, unsaved approval input protection, linked follow-up with parent open, and memory-aware handoff confirmation.')
             assert not errors, errors
             print('PASS: patient-name opens persisted basic information first; independent history/rounding tabs and admission selection; doctor feedback inbox, automatic result updates, unsaved input preservation, review count clearing; injected test-model Agent panel, real read tools, evidence candidate review, persisted traces, handoff confirmation and reload. No online model verification.')
             print('PASS: prior rounding/history regression; report event auto recovery; independent finding review; version-specific acknowledgement; physician resolution; dependent sensitivity task and second event recovery; persisted trace and reload; incoming report text never executes.')
         finally:
+            matter_service.configured,matter_service.get_provider=original_matter_configured,original_matter_provider
             agent_provider.configured = original_configured
             admission_service.configured,admission_service.get_provider=original_admission_configured,original_admission_provider
             server.should_exit = True

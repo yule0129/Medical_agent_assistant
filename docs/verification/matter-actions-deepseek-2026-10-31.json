@@ -1,0 +1,327 @@
+{
+  "synthetic_only": true,
+  "model": "deepseek-flash",
+  "cases": [
+    {
+      "scenario": "result",
+      "snapshot": {
+        "matter": {
+          "id": 1,
+          "kind": "RECHECK",
+          "title": "复查血常规",
+          "quote": "明天复查血常规。",
+          "version": 1,
+          "parent_id": null,
+          "active_child_purposes": [],
+          "original_source": {
+            "at": "2026-10-31T01:00:00+00:00"
+          }
+        },
+        "past_due": false,
+        "coverage": {
+          "complete": true,
+          "scope": "固定合成资料"
+        },
+        "sources": [
+          {
+            "id": "origin",
+            "kind": "NOTE",
+            "label": "合成原计划",
+            "text": "明天复查血常规。",
+            "version": 1,
+            "is_origin": true,
+            "at": "2026-10-31T01:00:00+00:00"
+          },
+          {
+            "id": "lab",
+            "kind": "LAB",
+            "label": "血常规",
+            "text": "【合成结果】白细胞计数12×10^9/L。",
+            "version": 1,
+            "is_origin": false,
+            "at": "2026-10-31T02:00:00+00:00"
+          }
+        ]
+      },
+      "observation": {
+        "state": "RESULT_AVAILABLE",
+        "summary": "本次已读取资料显示，原计划为明日复查血常规；现有一条与血常规对应的检验结果已返回：白细胞计数12×10^9/L。该结果尚未见医生查看或处理记录，仅作为结果返回候选，是否完成由医生核对后决定。",
+        "references": [
+          {
+            "source_id": "lab",
+            "quote": "【合成结果】白细胞计数12×10^9/L。"
+          }
+        ],
+        "actions": [
+          {
+            "action": "CREATE_FOLLOWUP",
+            "purpose": "REVIEW_RESULT",
+            "title": "查看已返回的血常规结果并记录处理",
+            "rationale": "血常规检验结果已返回，与“复查血常规”事项明确对应；建议创建待办提醒医生查看该现有结果并在事项中记录处理，是否完成由医生批准后决定。",
+            "source_ids": [
+              "lab"
+            ],
+            "due_text": ""
+          }
+        ]
+      },
+      "valid_actions": [
+        {
+          "action": "CREATE_FOLLOWUP",
+          "purpose": "REVIEW_RESULT",
+          "title": "查看已返回的血常规结果并记录处理",
+          "rationale": "血常规检验结果已返回，与“复查血常规”事项明确对应；建议创建待办提醒医生查看该现有结果并在事项中记录处理，是否完成由医生批准后决定。",
+          "source_ids": [
+            "lab"
+          ],
+          "due_text": ""
+        }
+      ]
+    },
+    {
+      "scenario": "changed",
+      "snapshot": {
+        "matter": {
+          "id": 1,
+          "kind": "CONTACT",
+          "title": "联系心内科会诊",
+          "quote": "今天联系心内科会诊。",
+          "version": 1,
+          "parent_id": null,
+          "active_child_purposes": [],
+          "original_source": {
+            "at": "2026-10-31T01:00:00+00:00"
+          }
+        },
+        "past_due": false,
+        "coverage": {
+          "complete": true,
+          "scope": "固定合成资料"
+        },
+        "sources": [
+          {
+            "id": "origin",
+            "kind": "NOTE",
+            "label": "合成原计划",
+            "text": "今天联系心内科会诊。",
+            "version": 1,
+            "is_origin": true,
+            "at": "2026-10-31T01:00:00+00:00"
+          },
+          {
+            "id": "note",
+            "kind": "NOTE",
+            "label": "合成医生查房",
+            "text": "医生：原计划改为明天下午联系心内科会诊。",
+            "version": 1,
+            "is_origin": false,
+            "at": "2026-10-31T02:00:00+00:00"
+          }
+        ]
+      },
+      "observation": {
+        "state": "PLAN_CHANGED",
+        "summary": "原计划为“今天联系心内科会诊”，本次已读取的医生查房记录明确调整该计划为“原计划改为明天下午联系心内科会诊”，属于对原联系会诊计划的明确时间调整，尚未显示已完成联系。",
+        "references": [
+          {
+            "source_id": "origin",
+            "quote": "今天联系心内科会诊。"
+          },
+          {
+            "source_id": "note",
+            "quote": "医生：原计划改为明天下午联系心内科会诊。"
+          }
+        ],
+        "actions": [
+          {
+            "action": "REVISE_PLAN",
+            "purpose": null,
+            "title": "请医生核对并批准按新记录调整联系心内科会诊时间",
+            "rationale": "查房记录明确记载“原计划改为明天下午联系心内科会诊”，与原计划时间不一致；本候选仅为提请医生批准修改计划，具体时间与负责人由医生确认后生效。",
+            "source_ids": [
+              "origin",
+              "note"
+            ],
+            "due_text": "明天下午"
+          }
+        ]
+      },
+      "valid_actions": [
+        {
+          "action": "REVISE_PLAN",
+          "purpose": null,
+          "title": "请医生核对并批准按新记录调整联系心内科会诊时间",
+          "rationale": "查房记录明确记载“原计划改为明天下午联系心内科会诊”，与原计划时间不一致；本候选仅为提请医生批准修改计划，具体时间与负责人由医生确认后生效。",
+          "source_ids": [
+            "origin",
+            "note"
+          ],
+          "due_text": "明天下午"
+        }
+      ]
+    },
+    {
+      "scenario": "response",
+      "snapshot": {
+        "matter": {
+          "id": 1,
+          "kind": "VERIFY_INFO",
+          "title": "向女儿核实过敏史",
+          "quote": "向女儿核实过敏史。",
+          "version": 1,
+          "parent_id": null,
+          "active_child_purposes": [],
+          "original_source": {
+            "at": "2026-10-31T01:00:00+00:00"
+          }
+        },
+        "past_due": false,
+        "coverage": {
+          "complete": true,
+          "scope": "固定合成资料"
+        },
+        "sources": [
+          {
+            "id": "origin",
+            "kind": "NOTE",
+            "label": "合成原计划",
+            "text": "向女儿核实过敏史。",
+            "version": 1,
+            "is_origin": true,
+            "at": "2026-10-31T01:00:00+00:00"
+          },
+          {
+            "id": "note",
+            "kind": "NOTE",
+            "label": "合成医生查房",
+            "text": "医生：已向女儿核实过敏史，确认青霉素过敏并已记录。",
+            "version": 1,
+            "is_origin": false,
+            "at": "2026-10-31T02:00:00+00:00"
+          }
+        ]
+      },
+      "observation": {
+        "state": "RESPONSE_RECORDED",
+        "summary": "本次已读取的合成医生查房记录显示，已向女儿核实过敏史，确认青霉素过敏并已记录，对应原计划“向女儿核实过敏史”，属明确记载已核实/已执行的新记录；正式完成仍由医生核对依据后决定。",
+        "references": [
+          {
+            "source_id": "note",
+            "quote": "医生：已向女儿核实过敏史，确认青霉素过敏并已记录。"
+          }
+        ],
+        "actions": [
+          {
+            "action": "COMPLETE_MATTER",
+            "purpose": null,
+            "title": "请医生核对查房记录后决定是否完成“向女儿核实过敏史”事项",
+            "rationale": "合成医生查房记录明确记载已向女儿核实过敏史并已记录，可作为完成候选依据；需医生核对执行依据后批准生效，不自动宣称完成。",
+            "source_ids": [
+              "note"
+            ],
+            "due_text": ""
+          },
+          {
+            "action": "CREATE_FOLLOWUP",
+            "purpose": "RECORD_RESPONSE",
+            "title": "请医生补充“核实过敏史”事项的处理记录",
+            "rationale": "查房记录仅简要记载已核实并记录青霉素过敏，是否需在事项层面补充处理记录由医生决定；此仅为工作流候选，经医生批准后才生效。",
+            "source_ids": [
+              "note"
+            ],
+            "due_text": ""
+          }
+        ]
+      },
+      "valid_actions": [
+        {
+          "action": "COMPLETE_MATTER",
+          "purpose": null,
+          "title": "请医生核对查房记录后决定是否完成“向女儿核实过敏史”事项",
+          "rationale": "合成医生查房记录明确记载已向女儿核实过敏史并已记录，可作为完成候选依据；需医生核对执行依据后批准生效，不自动宣称完成。",
+          "source_ids": [
+            "note"
+          ],
+          "due_text": ""
+        },
+        {
+          "action": "CREATE_FOLLOWUP",
+          "purpose": "RECORD_RESPONSE",
+          "title": "请医生补充“核实过敏史”事项的处理记录",
+          "rationale": "查房记录仅简要记载已核实并记录青霉素过敏，是否需在事项层面补充处理记录由医生决定；此仅为工作流候选，经医生批准后才生效。",
+          "source_ids": [
+            "note"
+          ],
+          "due_text": ""
+        }
+      ]
+    },
+    {
+      "scenario": "overdue",
+      "snapshot": {
+        "matter": {
+          "id": 1,
+          "kind": "CONTACT",
+          "title": "联系家属",
+          "quote": "联系家属核实病史。",
+          "version": 1,
+          "parent_id": null,
+          "active_child_purposes": [],
+          "original_source": {
+            "at": "2026-10-31T01:00:00+00:00"
+          }
+        },
+        "past_due": true,
+        "coverage": {
+          "complete": true,
+          "scope": "固定合成资料"
+        },
+        "sources": [
+          {
+            "id": "origin",
+            "kind": "NOTE",
+            "label": "合成原计划",
+            "text": "联系家属核实病史。",
+            "version": 1,
+            "is_origin": true,
+            "at": "2026-10-31T01:00:00+00:00"
+          }
+        ]
+      },
+      "observation": {
+        "state": "WAITING",
+        "summary": "本次已读取资料仅包含原始计划记录“联系家属核实病史”，未提供任何新的问诊、病程或检验记录，无法确认联系家属的事项是否已执行或已有回应。该事项已逾期，建议由医生决定是否重新安排联系时间。",
+        "references": [
+          {
+            "source_id": "origin",
+            "quote": "联系家属核实病史。"
+          }
+        ],
+        "actions": [
+          {
+            "action": "RESCHEDULE",
+            "purpose": null,
+            "title": "重新安排联系家属核实病史",
+            "rationale": "原计划“联系家属核实病史”已逾期，但本次已读取资料中无任何新记录表明已联系或家属已回应，无法确认是否执行。建议由医生批准后重新安排联系时间，具体日期与负责人由医生确定；本建议不构成已完成或新医嘱。",
+            "source_ids": [
+              "origin"
+            ],
+            "due_text": ""
+          }
+        ]
+      },
+      "valid_actions": [
+        {
+          "action": "RESCHEDULE",
+          "purpose": null,
+          "title": "重新安排联系家属核实病史",
+          "rationale": "原计划“联系家属核实病史”已逾期，但本次已读取资料中无任何新记录表明已联系或家属已回应，无法确认是否执行。建议由医生批准后重新安排联系时间，具体日期与负责人由医生确定；本建议不构成已完成或新医嘱。",
+          "source_ids": [
+            "origin"
+          ],
+          "due_text": ""
+        }
+      ]
+    }
+  ]
+}

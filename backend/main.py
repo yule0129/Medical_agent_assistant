@@ -21,6 +21,7 @@ from .routes.timeline import router as timeline_router
 from .routes.tasks import router as tasks_router
 from .routes.reports import router as reports_router
 from .routes.patients import router as patients_router
+from .routes.bedside import router as bedside_router
 from agent.api.router import router as agent_router
 from .services.intent_service import require_scope
 from .services.rounding_service import rounding_summary
@@ -99,6 +100,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.include_router(patients_router)
+app.include_router(bedside_router)
 app.include_router(events_router)
 app.include_router(intents_router)
 app.include_router(workflow_router)
@@ -188,7 +190,7 @@ def list_patients(doctor_id: int = 1, db: Session = Depends(get_db)):
         today_query = select(func.count()).select_from(RoundingSession).where(RoundingSession.encounter_id == encounter.id, RoundingSession.started_at >= day_start, RoundingSession.started_at < day_start + timedelta(days=1)) if encounter else None
         today_count = db.scalar(today_query) if today_query is not None else 0
         completed_count = db.scalar(today_query.where(RoundingSession.status == "COMPLETED")) if today_query is not None else 0
-        result.append({"id": patient.id, "name": patient.name, "admission_number": patient.admission_number, "bed": patient.bed_number, "diagnosis": patient.diagnosis, "gender": patient.gender, "age": patient.age, "encounter_id": encounter.id if encounter else None, "encounter_number": encounter.encounter_number if encounter else None, "rounding_status": rounding_status, "latest_rounding_id": latest.id if latest else None, "today_rounding_count": today_count, "today_completed_rounding_count": completed_count})
+        result.append({"id": patient.id, "name": patient.name, "admission_number": patient.admission_number, "bed": patient.bed_number, "diagnosis": patient.diagnosis, "gender": patient.gender, "age": patient.age, "encounter_id": encounter.id if encounter else None, "encounter_number": encounter.encounter_number if encounter else None, "rounding_status": rounding_status, "latest_rounding_id": latest.id if latest else None, "latest_rounding_mode": latest.record_mode if latest else None, "today_rounding_count": today_count, "today_completed_rounding_count": completed_count})
     return result
 
 

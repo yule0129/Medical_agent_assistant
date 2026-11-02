@@ -42,7 +42,7 @@ async function loadBackendPatients() {
   const data = await workflowFetch('/patients?doctor_id=1');
   patients.splice(0, patients.length, ...data.map(p => ({name:p.name, id:p.admission_number,
     bed:p.bed, diagnosis:p.diagnosis, backendPatientId:p.id, encounterId:p.encounter_id,
-    encounterNumber:p.encounter_number, gender:p.gender, age:p.age, todayRoundings:p.today_rounding_count||0, todayCompleted:p.today_completed_rounding_count||0, status:p.rounding_status||'待查房', tone:p.rounding_status==='已完成'?'green':'orange', latestRoundingId:p.latest_rounding_id})));
+    encounterNumber:p.encounter_number, gender:p.gender, age:p.age, todayRoundings:p.today_rounding_count||0, todayCompleted:p.today_completed_rounding_count||0, status:p.rounding_status||'待查房', tone:p.rounding_status==='已完成'?'green':'orange', latestRoundingId:p.latest_rounding_id,latestRoundingMode:p.latest_rounding_mode})));
   if (!patients.some(p => p.encounterId === currentEncounterId) && !patients.some(p=>p.backendPatientId===workflowPatientId)) currentEncounterId = patients[0]?.encounterId;
   renderPatients();
   const total=document.getElementById('patientTotal'); if(total)total.textContent=patients.length;
@@ -59,15 +59,15 @@ async function refreshDashboardTotals() {
     const pendingTasks=document.getElementById('pendingTaskTotal');if(pendingTasks)pendingTasks.textContent=tasks.filter(t=>!['RESOLVED','CANCELLED','REJECTED'].includes(t.status)).length;
     const open=tasks.filter(t=>!['RESOLVED','CANCELLED','REJECTED'].includes(t.status));
     const reminders=document.getElementById('homeReminders');
-    if(reminders)reminders.innerHTML=(patients.filter(p=>p.status==='待结束').map(p=>`<div class="alert" onclick="currentEncounterId=${p.encounterId};currentRoundingId=${p.latestRoundingId};openWorkflowPanel()"><div><b>${html(p.name)}</b><br/>本次查房已保存，等待结束。</div></div>`).join(''))+
-      open.slice(0,5).map(t=>`<div class="alert" onclick="${t.intent_type==='ADMISSION_RECORD'?`openAdmissionRecord(${t.patient_id},${t.encounter_id})`:`openTaskDetail(${t.id})`}"><div><b>${html(t.patient)}</b><br/>${t.overdue?'⚠ 已逾期 · ':''}待办：${html(t.waiting_for)}${t.intent_type==='ADMISSION_RECORD'?`<br/>截止：${html(localTime(t.due_at))}`:''}</div></div>`).join('')+
+    if(reminders)reminders.innerHTML=(patients.filter(p=>p.status==='待结束').map(p=>`<div class="alert" onclick="continueRounding(${p.latestRoundingId},${p.encounterId},${p.backendPatientId})"><div><b>${html(p.name)}</b><br/>本次查房已保存，等待结束。</div></div>`).join(''))+
+      open.slice(0,5).map(t=>`<div class="alert" onclick="${t.intent_type==='PATIENT_MATTER'?`openPatientMatters(${t.patient_id},${t.encounter_id})`:t.intent_type==='ADMISSION_RECORD'?`openAdmissionRecord(${t.patient_id},${t.encounter_id})`:t.intent_type==='FIRST_ROUNDING'?`openBedsideRounding(${t.patient_id},${t.encounter_id},${t.rounding_id||'null'})`:`openTaskDetail(${t.id})`}"><div><b>${html(t.patient)}</b><br/>${t.overdue?'⚠ 已逾期 · ':''}待办：${html(t.waiting_for)}${['ADMISSION_RECORD','FIRST_ROUNDING'].includes(t.intent_type)?`<br/>截止：${html(localTime(t.due_at))}`:''}</div></div>`).join('')+
       (records.some(r=>r.status!=='已签署')?'<div class="alert" onclick="openRecordList()">有病历待审核；审核签署与查房结束分别处理。</div>':'')||'<p class="section-note" style="padding:0 20px">当前没有待处理事项。</p>';
     const count=document.getElementById('homeReminderCount');if(count)count.textContent=(open.length+patients.filter(p=>p.status==='待结束').length+records.filter(r=>r.status!=='已签署').length)+' 项';
   }catch(error){console.warn('工作台统计读取失败',error.message);}
 }
 async function loadDoctorTasks() {
-  const [clinical,admission]=await Promise.all([workflowFetch('/tasks?doctor_id=1'),workflowFetch('/admission-tasks?doctor_id=1')]);
-  return [...clinical,...admission].sort((a,b)=>(a.due_at?Date.parse(a.due_at):Infinity)-(b.due_at?Date.parse(b.due_at):Infinity));
+  const [clinical,admission,rounding,matters]=await Promise.all([workflowFetch('/tasks?doctor_id=1'),workflowFetch('/admission-tasks?doctor_id=1'),workflowFetch('/rounding-tasks?doctor_id=1'),workflowFetch('/agent/matter-tasks?doctor_id=1')]);
+  return [...clinical,...admission,...rounding,...matters].sort((a,b)=>(a.due_at?Date.parse(a.due_at):Infinity)-(b.due_at?Date.parse(b.due_at):Infinity));
 }
 
 async function selectPatient(name) {
@@ -187,7 +187,7 @@ function workflowPanelHtml() {
   const patient=patients.find(p=>p.encounterId===currentEncounterId)||patients.find(p=>p.backendPatientId===workflowPatientId);
   return `<div class="workflow-toolbar"><div><b>查房 → 小任务 → 任务安排</b><p class="section-note">${html(patient?.name)} · ${html(patient?.bed)} · ${html(patient?.encounterId===currentEncounterId?patient.encounterNumber:('历史住院 #'+currentEncounterId))}</p>
     <select onchange="currentEncounterId=Number(this.value);workflowPatientId=null;currentRoundingId=null;openWorkflowPanel()">${!patients.some(p=>p.encounterId===currentEncounterId)&&patient?`<option value="${currentEncounterId}" selected>${html(patient.name)} · 历史住院</option>`:''}${patients.filter(p=>p.encounterId).map(p=>`<option value="${p.encounterId}" ${p.encounterId===currentEncounterId?'selected':''}>${html(p.name)} · ${html(p.bed)}</option>`).join('')}</select></div>
-    <button class="secondary" onclick="openRound()">＋ 新一次查房</button>${patient?`<button class="secondary" onclick="openPatientHistory(${patient.backendPatientId})">历史病历与查房</button>`:''}<button class="secondary" onclick="openTaskSchedule()">任务安排</button></div>
+    <button class="secondary" onclick="openBedsideRounding(workflowPatientId,currentEncounterId,null,true)">＋ 新一次查房</button>${patient?`<button class="secondary" onclick="openPatientHistory(${patient.backendPatientId})">历史病历与查房</button>`:''}<button class="secondary" onclick="openTaskSchedule()">任务安排</button></div>
     <div id="workflowStatus" class="section-note">正在读取...</div><div id="roundingLifecycle"></div><div class="workflow-grid"><div><h3>本次查房的小任务（需确认）</h3><div id="workflowIntents" class="detail-list"></div></div>
     <div><h3>已加入任务安排</h3><div id="workflowLoops" class="detail-list"></div></div></div><h3>本次住院时间线</h3><div id="workflowTimeline" class="timeline"></div>`;
 }
@@ -204,6 +204,10 @@ function candidateHtml(item) {
     <button class="primary" onclick="confirmWorkflowIntent(${item.id})">确认并加入任务安排</button></p><input id="ignoreReason-${item.id}" placeholder="如需忽略，请填写原因" /> <button class="secondary" onclick="rejectWorkflowIntent(${item.id})">忽略</button><p id="candidateError-${item.id}" role="alert" style="color:#b42318"></p></div></div>`;
 }
 function taskHtml(item) {
+  if(item.intent_type==='PATIENT_MATTER')return `<div class="workflow-item" data-matter-task="${item.matter_id}"><div><b>${html(item.patient)} · ${html(item.waiting_for)}</b> ${workflowStatusTag(item.status)}<p>计划：${html(item.due_at?localTime(item.due_at):'待安排')} ${item.overdue?'· 已逾期':''}</p><p>${html(item.state_reason)}</p><button class="primary" onclick="openPatientMatters(${item.patient_id},${item.encounter_id},'${item.status==='WAITING_EVENT'?'active':'done'}')">查看事项与原文依据</button></div></div>`;
+
+  if(item.intent_type==='FIRST_ROUNDING')return `<div class="workflow-item" data-rounding-task="${item.encounter_id}"><div><b>${html(item.patient)} · 入院后首次查房</b> <span class="tag ${item.status==='RESOLVED'?'green':'orange'}">${item.status==='RESOLVED'?'已完成':item.overdue?'已逾期':'待查房'}</span><p>截止：${html(localTime(item.due_at))} · 入院后48小时</p><p>${html(item.state_reason)}${item.late?'（实际查房时间已晚于截止）':''}</p><button class="primary" onclick="openBedsideRounding(${item.patient_id},${item.encounter_id},${item.rounding_id||'null'})">${item.status==='RESOLVED'?'查看查房记录':'记录／继续查房'}</button></div></div>`;
+
   if(item.intent_type==='ADMISSION_RECORD')return `<div class="workflow-item" data-admission-task="${item.encounter_id}"><div><b>${html(item.patient)} · 审查入院记录</b> <span class="tag ${item.status==='RESOLVED'?'green':'orange'}">${item.status==='RESOLVED'?'已审查签署':item.overdue?'已逾期':item.draft_ready?'待审查':'待生成草稿'}</span><p>截止：${html(localTime(item.due_at))} · 入院后24小时</p><p>${html(item.state_reason)}</p><button class="primary" onclick="openAdmissionRecord(${item.patient_id},${item.encounter_id})">${item.status==='RESOLVED'?'查看入院记录':item.draft_ready?'去审查':'补充问诊／生成草稿'}</button></div></div>`;
   const overdue=item.due_at && new Date(item.due_at)<new Date() && !['RESOLVED','CANCELLED'].includes(item.status);
   const simple=['ACTION','MONITOR'].includes(item.intent_type);
@@ -231,6 +235,7 @@ async function refreshWorkflow() {
       ${round.record_id?`<button class="secondary" onclick="openMedicalRecord(${round.record_id})">查看本次病历</button>`:''}
       ${round.status==='COMPLETED'?`<p>结束时间：${html(localTime(round.ended_at))}。后续任务继续在任务安排中跟进。</p><button class="primary" onclick="openTaskSchedule()">继续处理后续任务</button>`:`<p>${round.candidate_count?'先逐项确认或忽略候选任务，再结束查房。':'候选任务已处理，可以结束查房；后续随访任务继续保留。'}病历审核签署可单独进行。</p><button class="primary" id="finishRoundingButton" ${round.candidate_count||round.status!=='SUBMITTED'?'disabled':''} onclick="finishRounding(${round.id})">结束本次查房</button>`}
       <p id="roundingError" role="alert" style="color:#b42318"></p></div>`:'<p>尚无保存的查房记录，请先开始查房。</p>';
+    if(lifecycle&&round?.record_mode==='TRANSCRIPT')lifecycle.innerHTML=`<div class="draft" style="display:block"><b>${round.status==='COMPLETED'?'✓ 本次查房已完成':'查房问诊已暂存'}</b><p>查房问诊已直接保存，无需生成或审查总结。</p><button class="primary" onclick="openBedsideRounding(${workflowPatientId},${round.encounter_id},${round.id})">查看／继续查房</button></div>`;
     const box=document.getElementById('workflowIntents'); if(box)box.innerHTML=candidates.map(candidateHtml).join('')||'<p>没有待确认小任务。已确认的任务在右侧继续跟进。</p>';
     const loops=document.getElementById('workflowLoops'); if(loops) loops.innerHTML=roundTasks.map(taskHtml).join('')||'<p>本次查房暂无已确认的后续任务。</p>';
     const tl=document.getElementById('workflowTimeline'); if(tl)tl.innerHTML=timeline.items.map(t=>`<div class="timeline-item"><div class="dot"></div><div>${html(localTime(t.occurred_at))}<p>${html(t.title)} · ${html(t.status)}</p></div></div>`).join('');
@@ -329,7 +334,7 @@ async function openHandoff() {
 
 (async function initializeWorkflow() {
   medicalRecords.splice(0); // Records are always loaded from the API.
-  try {await loadBackendPatients(); await refreshWorkflow(); await refreshDashboardTotals(); await refreshAgentFeedback(false);}
+  try {await loadBackendPatients(); await refreshWorkflow(); await refreshDashboardTotals(); await refreshAgentFeedback(false); await refreshMatterProgress();}
   catch(error){document.getElementById('homeWorkflowStatus').textContent='连接失败';showToast('请启动后端后重试');}
 })();
 // Recalculate admission deadlines from the server without replacing an open editor.

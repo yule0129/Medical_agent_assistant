@@ -76,7 +76,7 @@ async function openAgentHandoff(encounterId,create=true) {
     box.innerHTML=`<p>当前住院交接快照，已确认版本保留；确认交接不会完成任务。</p>${reports.map((r,i)=>`<details ${i===0?'open':''}><summary>交接 #${r.id} · v${r.version} · ${html(r.status)}</summary><textarea id="handoffContent-${r.id}">${html(r.content)}</textarea>
       <button class="secondary" onclick="reviseAgentHandoff(${encounterId},${r.id},${r.version})">保存为新版本</button>
       ${r.status==='DRAFT'?`<button class="secondary" onclick="confirmAgentHandoff(${encounterId},${r.id},${r.version})">确认此交接快照</button>`:''}
-      ${(r.references||[]).filter(ref=>ref.loop_id).map(ref=>`<button class="secondary" onclick="openTaskDetail(${ref.loop_id})">任务 #${ref.loop_id}${ref.evidence_id?' · 证据 #'+ref.evidence_id:''}</button>`).join('')}</details>`).join('')||'暂无交接记录'}<p id="agentHandoffError" role="alert"></p>`;
+      ${(r.references||[]).filter(ref=>ref.matter_id).map(ref=>`<button class="secondary" onclick="openPatientMatters(${ref.patient_id},${encounterId})">事项 M#${ref.matter_id}</button>`).join('')}${(r.references||[]).filter(ref=>ref.loop_id).map(ref=>`<button class="secondary" onclick="openTaskDetail(${ref.loop_id})">任务 #${ref.loop_id}${ref.evidence_id?' · 证据 #'+ref.evidence_id:''}</button>`).join('')}</details>`).join('')||'暂无交接记录'}<p id="agentHandoffError" role="alert"></p>`;
   }catch(error){box.textContent='交接读取失败：'+error.message;}
 }
 async function reviseAgentHandoff(encounterId,id,version) {

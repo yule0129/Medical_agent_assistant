@@ -9,6 +9,9 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .db import Base
 from agent.admission.models import AdmissionWorkspace  # register shared metadata
+from agent.patient_memory.models import MatterScan, PatientMatter
+from agent.patient_memory.progress.models import MatterProgressJob, MatterProgress
+from agent.patient_memory.actions.models import MatterAction, MatterLink
 
 
 class LoopStatus(str, enum.Enum):
@@ -119,6 +122,8 @@ class RoundingSession(Base):
     status: Mapped[str] = mapped_column(String(30), default="DRAFT")
     audio_filename: Mapped[str | None] = mapped_column(String(255), nullable=True)
     transcript_source: Mapped[str] = mapped_column(String(30), default="manual")
+    record_mode: Mapped[str] = mapped_column(String(20), default="WORKFLOW", server_default="WORKFLOW")
+    version: Mapped[int] = mapped_column(default=1, server_default="1")
 
 
 class ClinicalEvent(Base):

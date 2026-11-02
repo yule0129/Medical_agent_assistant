@@ -43,7 +43,8 @@ def list_roundings(encounter_id: int, doctor_id: int = 1, db: Session = Depends(
 @router.get("/{session_id}")
 def get_rounding(session_id: int, doctor_id: int = 1, db: Session = Depends(get_db)):
     row = require_rounding(db, session_id, doctor_id)
-    return {**rounding_summary(db, row), "transcript": row.transcript, "generated_note": row.generated_note}
+    return {**rounding_summary(db, row), "transcript": row.transcript, "generated_note": row.generated_note,
+            "transcript_source": row.transcript_source, "request_key": row.request_key}
 
 
 class RoundingFinish(BaseModel):
@@ -55,6 +56,8 @@ class RoundingFinish(BaseModel):
 def finish_rounding(session_id: int, payload: RoundingFinish, db: Session = Depends(get_db)):
     row = require_rounding(db, session_id, payload.doctor_id, lock=True)
     summary = rounding_summary(db, row)
+    if row.record_mode == 'TRANSCRIPT':
+        raise HTTPException(409, '请从查房问诊页确认完成，无需生成或审核病历草稿')
     if row.status == "COMPLETED":
         return summary
     if row.status != "SUBMITTED" or summary["record_id"] is None:

@@ -1,0 +1,191 @@
+{
+  "synthetic_only": true,
+  "model": "deepseek-flash",
+  "cases": [
+    {
+      "scenario": "response",
+      "snapshot": {
+        "matter": {
+          "id": 1,
+          "kind": "VERIFY_INFO",
+          "title": "向女儿核实药物过敏史",
+          "quote": "药物过敏史还需向女儿核实。",
+          "due_at": null,
+          "original_source": {
+            "at": "2026-10-31T01:00:00+00:00"
+          }
+        },
+        "past_due": false,
+        "coverage": {
+          "complete": true,
+          "scope": "仅合成资料"
+        },
+        "sources": [
+          {
+            "id": "origin",
+            "kind": "NOTE",
+            "label": "合成原计划",
+            "text": "药物过敏史还需向女儿核实。",
+            "is_origin": true,
+            "at": "2026-10-31T02:00:00+00:00"
+          },
+          {
+            "id": "note-new",
+            "kind": "NOTE",
+            "label": "合成查房2",
+            "text": "医生：已向女儿核实，患者既往服用阿莫西林后出现皮疹，已补充过敏史。",
+            "is_origin": false,
+            "at": "2026-10-31T02:00:00+00:00"
+          }
+        ]
+      },
+      "observation": {
+        "state": "RESPONSE_RECORDED",
+        "summary": "本次已读取资料中，合成查房2记录医生已向女儿核实药物过敏史，患者既往服用阿莫西林后出现皮疹，并已补充过敏史，进展事项对应明确。",
+        "references": [
+          {
+            "source_id": "note-new",
+            "quote": "医生：已向女儿核实，患者既往服用阿莫西林后出现皮疹，已补充过敏史。"
+          }
+        ]
+      }
+    },
+    {
+      "scenario": "result",
+      "snapshot": {
+        "matter": {
+          "id": 1,
+          "kind": "RECHECK",
+          "title": "复查血常规",
+          "quote": "明天复查血常规。",
+          "due_at": null,
+          "original_source": {
+            "at": "2026-10-31T01:00:00+00:00"
+          }
+        },
+        "past_due": false,
+        "coverage": {
+          "complete": true,
+          "scope": "仅合成资料"
+        },
+        "sources": [
+          {
+            "id": "origin",
+            "kind": "NOTE",
+            "label": "合成原计划",
+            "text": "明天复查血常规。",
+            "is_origin": true,
+            "at": "2026-10-31T02:00:00+00:00"
+          },
+          {
+            "id": "lab-v2",
+            "kind": "LAB",
+            "label": "血常规",
+            "text": "【合成检查】白细胞计数12.0×10^9/L。",
+            "version": 2,
+            "is_origin": false,
+            "at": "2026-10-31T02:00:00+00:00"
+          }
+        ]
+      },
+      "observation": {
+        "state": "RESULT_AVAILABLE",
+        "summary": "本次已读取资料显示，原计划为“明天复查血常规”，现已有与事项明确对应的血常规检查结果返回（白细胞计数12.0×10^9/L），该结果尚需医生查看判断。",
+        "references": [
+          {
+            "source_id": "lab-v2",
+            "quote": "【合成检查】白细胞计数12.0×10^9/L。"
+          }
+        ]
+      }
+    },
+    {
+      "scenario": "changed",
+      "snapshot": {
+        "matter": {
+          "id": 1,
+          "kind": "CONTACT",
+          "title": "联系心内科会诊",
+          "quote": "请今天联系心内科会诊。",
+          "due_at": null,
+          "original_source": {
+            "at": "2026-10-31T01:00:00+00:00"
+          }
+        },
+        "past_due": false,
+        "coverage": {
+          "complete": true,
+          "scope": "仅合成资料"
+        },
+        "sources": [
+          {
+            "id": "origin",
+            "kind": "NOTE",
+            "label": "合成原计划",
+            "text": "请今天联系心内科会诊。",
+            "is_origin": true,
+            "at": "2026-10-31T02:00:00+00:00"
+          },
+          {
+            "id": "note-change",
+            "kind": "NOTE",
+            "label": "合成查房2",
+            "text": "医生：原计划改为明天下午联系心内科会诊，今天暂不联系。",
+            "is_origin": false,
+            "at": "2026-10-31T02:00:00+00:00"
+          }
+        ]
+      },
+      "observation": {
+        "state": "PLAN_CHANGED",
+        "summary": "医生在本次查房记录中明确调整原计划：心内科会诊改为明天下午联系，今天暂不联系。原计划“今天联系心内科会诊”不再按原时点执行，仅供医生确认。",
+        "references": [
+          {
+            "source_id": "note-change",
+            "quote": "医生：原计划改为明天下午联系心内科会诊，今天暂不联系。"
+          }
+        ]
+      }
+    },
+    {
+      "scenario": "waiting",
+      "snapshot": {
+        "matter": {
+          "id": 1,
+          "kind": "RECHECK",
+          "title": "复查血常规",
+          "quote": "明天复查血常规。",
+          "due_at": null,
+          "original_source": {
+            "at": "2026-10-31T01:00:00+00:00"
+          }
+        },
+        "past_due": false,
+        "coverage": {
+          "complete": true,
+          "scope": "仅合成资料"
+        },
+        "sources": [
+          {
+            "id": "origin",
+            "kind": "NOTE",
+            "label": "合成原计划",
+            "text": "明天复查血常规。",
+            "is_origin": true,
+            "at": "2026-10-31T02:00:00+00:00"
+          }
+        ]
+      },
+      "observation": {
+        "state": "WAITING",
+        "summary": "本次已读取资料仅为原计划记录“明天复查血常规”，尚无病程、问诊或检验报告显示该项复查已执行或结果已返回，故当前为等待状态。",
+        "references": [
+          {
+            "source_id": "origin",
+            "quote": "明天复查血常规。"
+          }
+        ]
+      }
+    }
+  ]
+}

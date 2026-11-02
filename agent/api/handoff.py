@@ -69,6 +69,8 @@ def confirm_handoff(handoff_id: int, payload: Start, db: Session = Depends(get_d
     current_ids = set(db.scalars(select(OpenLoop.id).where(OpenLoop.encounter_id == row.encounter_id, OpenLoop.status.notin_(["RESOLVED", "CANCELLED", "REJECTED"]))))
     if expected_ids != current_ids:
         raise HTTPException(409, "未完成任务集合已变化，请重新生成交接")
+    from agent.patient_memory.actions.handoff import validate_memory_handoff
+    validate_memory_handoff(db,row)
     # Preserve mandatory task identities even when the clinician edits the prose.
     if any(f"#{loop_id}" not in row.content for loop_id in current_ids):
         raise HTTPException(409, "交接内容缺少必需任务标识，请保留全部待办任务")

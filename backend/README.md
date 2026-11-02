@@ -76,3 +76,5 @@ python -m backend.worker.main --poll-interval 1
 DeepSeek 配置、/api/agent 接口、前端操作与隔离在线验收见 [Agent 模块说明](../agent/README.md)。当前 110 项自动检查、浏览器及 PostgreSQL 验证通过（模型流程使用注入测试模型）；三类真实 DeepSeek 合成调查另已通过。配置后需重启 API 和 Worker。
 
 患者资料与入院Agent另有0006、0007增量迁移，当前部署请运行 `python -m alembic upgrade head` 至0007。入院Agent的问诊、检查、草稿及审查签署流程见根目录README与agent/README.md；API进程必须能够访问已配置的DeepSeek服务。
+
+患者事项第三层当前需迁移到0011_matter_actions并重启API和进展Worker。支持来源受控的行动候选、医生审核执行、父子事项与交接快照；完整使用说明见根README。

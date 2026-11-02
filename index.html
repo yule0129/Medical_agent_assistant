@@ -161,7 +161,7 @@
         <button class="profile-button" onclick="openPanel('个人信息')"><div class="avatar">张</div><div><div class="profile-name">张医生</div><div class="profile-role">住院医师 · 呼吸内科</div></div><span style="color:#9aa8b6;margin-left:8px">⌄</span></button>
       </header>
       <section class="content">
-        <div class="page-heading"><div><h1>早上好，张医生</h1><div class="date">2026年9月23日 星期三 · 呼吸内科一病区 · 您今天有 5 位患者需要查房</div></div><button class="primary" onclick="openRound()">＋ 开始查房</button></div>
+        <div class="page-heading"><div><h1>早上好，张医生</h1><div class="date">2026年9月23日 星期三 · 呼吸内科一病区 · 您今天有 5 位患者需要查房</div></div><button class="primary" onclick="openBedsideRounding()">＋ 开始查房</button></div>
         <div class="stats">
           <button class="card stat" style="border:1px solid var(--line);text-align:left" onclick="viewAllPatients()"><div><div class="stat-label">我的患者</div><span class="stat-number" id="patientTotal">—</span><span class="stat-note">位负责患者</span></div><div class="stat-icon blue-bg">♙</div></button>
           <button class="card stat" style="border:1px solid var(--line);text-align:left" onclick="openPanel('病历文书')"><div><div class="stat-label">待完成病程</div><span class="stat-number" id="pendingRecordTotal">—</span><span class="stat-note" style="color:var(--orange)">份待审核</span></div><div class="stat-icon orange-bg">▤</div></button>
@@ -177,7 +177,7 @@
             <div class="workflow-arrow">→</div>
             <div class="workflow-step"><span class="workflow-step-icon green-bg">3</span><div><b>Open Loop</b><p id="homeLoopText">等待医生确认后进入等待状态</p></div></div>
           </div>
-          <div class="workflow-home-actions"><button class="primary" onclick="openRound()">＋ 开始真实查房</button><button class="secondary" onclick="openWorkflowPanel()">查看完整工作流</button><span id="homeWorkflowHint" class="section-note">后端连接后显示真实状态</span></div>
+          <div class="workflow-home-actions"><button class="primary" onclick="openBedsideRounding()">＋ 开始真实查房</button><button class="secondary" onclick="openWorkflowPanel()">查看完整工作流</button><span id="homeWorkflowHint" class="section-note">后端连接后显示真实状态</span></div>
         </div>
         <section class="card" id="agentFeedbackCard" aria-live="polite" style="margin-bottom:20px">
           <div class="card-head"><div><div class="card-title">Agent 工作反馈</div><p class="section-note" id="agentFeedbackStatus">正在读取调查反馈…</p></div><button class="secondary" onclick="openAgentInbox()" id="agentFeedbackCount">查看全部反馈</button></div>
@@ -193,7 +193,7 @@
           <div class="side-stack">
             <div class="card"><div class="card-head"><div class="card-title">待处理事项</div><span class="tag orange" id="homeReminderCount">—</span></div><div id="homeReminders" style="padding-top:16px"></div></div>
             <div class="card"><div class="card-head"><div class="card-title">当前患者动态</div><button class="link" onclick="openWorkflowPanel()">查看记录</button></div><div class="timeline" id="homeRecentTimeline"></div></div>
-            <div class="card"><div class="card-head"><div class="card-title">快捷操作</div></div><div class="quick-actions"><button class="quick" onclick="openRound()"><span class="quick-icon">◉</span>开始查房记录</button><button class="quick" onclick="openPanel('新建病历文书')"><span class="quick-icon">▤</span>新建病历文书</button><button class="quick" onclick="openPanel('交班摘要')"><span class="quick-icon">✦</span>生成交班摘要</button><button class="quick" onclick="openPanel('系统通知')"><span class="quick-icon">♢</span>查看系统通知</button></div></div>
+            <div class="card"><div class="card-head"><div class="card-title">快捷操作</div></div><div class="quick-actions"><button class="quick" onclick="openBedsideRounding()"><span class="quick-icon">◉</span>开始查房记录</button><button class="quick" onclick="openPanel('新建病历文书')"><span class="quick-icon">▤</span>新建病历文书</button><button class="quick" onclick="openPanel('交班摘要')"><span class="quick-icon">✦</span>生成交班摘要</button><button class="quick" onclick="openPanel('系统通知')"><span class="quick-icon">♢</span>查看系统通知</button></div></div>
           </div>
         </div>
       </section>
@@ -217,9 +217,9 @@
     function filterPatients(){ const q=document.getElementById('search').value.trim(); const s=document.getElementById('statusFilter').value; renderPatients(patients.filter(p=>(p.name+p.id+p.bed+p.diagnosis).includes(q) && (!s || p.status===s))); }
     let roundRecorder=null; let roundChunks=[]; let roundStartedAt=null; let roundSpeech=null; let roundSpeechBaseText='';
     async function toggleRoundRecording(){ const status=document.getElementById('recordingStatus'); const button=document.getElementById('recordButton'); if(roundRecorder&&roundRecorder.state==='recording'){ roundRecorder.stop(); if(roundSpeech){try{roundSpeech.stop()}catch(error){}} button.textContent='● 开始录音'; status.textContent='录音已停止，语音转写已写入文本框，请确认后生成病历'; return; } if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){ showToast('当前浏览器不支持录音，请直接输入查房内容'); return; } try{ const stream=await navigator.mediaDevices.getUserMedia({audio:true}); roundChunks=[]; roundRecorder=new MediaRecorder(stream); roundRecorder.ondataavailable=e=>{if(e.data.size)roundChunks.push(e.data)}; roundRecorder.onstop=()=>{stream.getTracks().forEach(track=>track.stop());}; if(window.SpeechRecognition||window.webkitSpeechRecognition){ const SpeechRecognition=window.SpeechRecognition||window.webkitSpeechRecognition; roundSpeech=new SpeechRecognition(); roundSpeech.lang='zh-CN'; roundSpeech.continuous=true; roundSpeech.interimResults=true; roundSpeech.onstart=()=>{status.textContent='正在录音并实时转写，请完成查房后点击停止';}; roundSpeech.onresult=e=>{let finalText=''; let interim=''; for(let i=e.resultIndex;i<e.results.length;i++){const text=e.results[i][0].transcript; if(e.results[i].isFinal)finalText+=text; else interim+=text;} const transcript=document.getElementById('roundTranscript'); if(finalText){roundSpeechBaseText=(roundSpeechBaseText+' '+finalText).trim(); transcript.value=roundSpeechBaseText;} if(interim)status.textContent='正在转写：'+interim;}; roundSpeech.onerror=()=>{status.textContent='录音中，语音识别暂不可用，可直接编辑文本';}; roundSpeech.onend=()=>{if(roundRecorder&&roundRecorder.state==='recording'){try{roundSpeech.start()}catch(error){}}}; roundSpeechBaseText=(document.getElementById('roundTranscript').value||'').trim(); try{roundSpeech.start()}catch(error){} } else { status.textContent='正在录音（当前浏览器不支持中文语音转写），请结束后手动填写文本'; } roundRecorder.start(); button.textContent='■ 停止录音'; }catch(error){ showToast('无法访问麦克风，请检查浏览器权限'); } }
-    function switchNav(button, label){ document.querySelectorAll('.nav-item').forEach(item=>item.classList.remove('active')); button.classList.add('active'); if(label==='工作概览'){ window.scrollTo({top:0,behavior:'smooth'}); return; } if(label==='我的患者'){ document.querySelector('.card-title').scrollIntoView({behavior:'smooth',block:'center'}); document.getElementById('search').focus(); return; } if(label==='查房记录'){ openWorkflowPanel(); return; } if(label==='任务安排'){openTaskSchedule();return;} if(label==='临床工作流'){ openWorkflowPanel(); return; } openPanel(label); }
+    function switchNav(button, label){ document.querySelectorAll('.nav-item').forEach(item=>item.classList.remove('active')); button.classList.add('active'); if(label==='工作概览'){ window.scrollTo({top:0,behavior:'smooth'}); return; } if(label==='我的患者'){ document.querySelector('.card-title').scrollIntoView({behavior:'smooth',block:'center'}); document.getElementById('search').focus(); return; } if(label==='查房记录'){ openBedsideRounding(); return; } if(label==='任务安排'){openTaskSchedule();return;} if(label==='临床工作流'){ openWorkflowPanel(); return; } openPanel(label); }
     function viewAllPatients(){ document.getElementById('search').value=''; renderPatients(patients); document.querySelector('.card-title').scrollIntoView({behavior:'smooth',block:'center'}); showToast('已展示全部负责患者'); }
-    function openPanel(title){ if(title==='系统通知'){openAgentInbox();return;} if(title==='最近动态'){openWorkflowPanel();return;} if(title==='查房记录'){openWorkflowPanel();return;} if(title==='病历文书'){openRecordList();return;} if(title==='任务安排'){openTaskSchedule();return;} if(title==='交班摘要'){openHandoff();return;} const data={
+    function openPanel(title){ if(title==='系统通知'){openAgentInbox();return;} if(title==='最近动态'){openWorkflowPanel();return;} if(title==='查房记录'){openBedsideRounding();return;} if(title==='病历文书'){openRecordList();return;} if(title==='任务安排'){openTaskSchedule();return;} if(title==='交班摘要'){openHandoff();return;} const data={
       '病历文书':{sub:'病历文书管理 · 点击记录查看正文',body:renderRecordList(),action:'新建病历'},
       '查房记录':{sub:'查房记录工作量',body:'<div class="detail-list"><div class="detail-row"><span>今日计划查房</span><span>5 位患者</span></div><div class="detail-row"><span>已完成</span><span style="color:var(--green)">3 位患者</span></div><div class="detail-row"><span>待完成</span><span style="color:var(--orange)">2 位患者</span></div></div><p class="section-note" style="margin-top:16px">点击“开始查房”进入患者查房记录流程。</p>',action:'开始查房'},
       '使用统计':{sub:'智能病历辅助使用统计',body:'<div class="record-grid"><div class="record-box"><small>本周生成草稿</small><b>18 份</b></div><div class="record-box"><small>平均修改率</small><b>22%</b></div><div class="record-box"><small>累计节省时间</small><b>2.4 小时</b></div></div><div class="detail-list"><div class="detail-row"><span>草稿采纳率</span><span style="color:var(--green)">86%</span></div><div class="detail-row"><span>本周使用天数</span><span>4 天</span></div></div>',action:'关闭'},
@@ -243,11 +243,15 @@
     document.getElementById('roundModal').addEventListener('click',e=>{if(e.target.id==='roundModal')closeRound()});
     document.getElementById('panelModal').addEventListener('click',e=>{if(e.target.id==='panelModal')closePanel()});
   </script>
-  <script src="frontend/patient-history.js?v=33148b447271"></script>
-  <script src="agent/frontend/admission.js?v=e2cfb8253cfa"></script>
+  <script src="agent/frontend/matter-actions.js?v=eb1918aaa8de"></script>
+  <script src="agent/frontend/matter-progress.js?v=9286da3c6a7b"></script>
+  <script src="agent/frontend/patient-matters.js?v=2039026e2649"></script>
+  <script src="frontend/bedside-rounding.js?v=0297c2849790"></script>
+  <script src="frontend/patient-history.js?v=86c09f355154"></script>
+  <script src="agent/frontend/admission.js?v=6c77d23ab6cd"></script>
   <script src="frontend/report-followup.js?v=0064e4d3c82b"></script>
   <script src="agent/frontend/feedback.js?v=32f349d046d8"></script>
-  <script src="agent/frontend/workspace.js?v=41f727af9e45"></script>
-  <script src="frontend/workflow.js?v=9f30a74e808d"></script>
+  <script src="agent/frontend/workspace.js?v=e6a1f870088f"></script>
+  <script src="frontend/workflow.js?v=64907ec38044"></script>
 </body>
 </html>

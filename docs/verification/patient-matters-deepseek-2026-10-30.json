@@ -1,0 +1,35 @@
+{
+  "synthetic_only": true,
+  "model": "deepseek-flash",
+  "source": {
+    "kind": "ROUNDING",
+    "id": 1,
+    "version": 1,
+    "label": "合成查房问诊",
+    "at": "2026-10-30T01:00:00+00:00",
+    "text": "【完全为合成测试】医生：药物过敏史还需向女儿核实。明天复查血常规。请联系心内科会诊。患者：今天咳嗽少了。"
+  },
+  "extraction": {
+    "items": [
+      {
+        "kind": "VERIFY_INFO",
+        "title": "向女儿核实药物过敏史",
+        "quote": "药物过敏史还需向女儿核实。",
+        "due_text": ""
+      },
+      {
+        "kind": "RECHECK",
+        "title": "明天复查血常规",
+        "quote": "明天复查血常规。",
+        "due_text": "明天"
+      },
+      {
+        "kind": "CONTACT",
+        "title": "联系心内科会诊",
+        "quote": "请联系心内科会诊。",
+        "due_text": ""
+      }
+    ]
+  },
+  "validated": "source quotes and explicit plan categories; clinician review still required"
+}

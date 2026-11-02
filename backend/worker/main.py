@@ -23,6 +23,11 @@ def main() -> None:
                     from agent.runtime.scheduler import schedule_due
                     schedule_due(db)
                     agent_result = process_agent_once(db)
+                    from agent.patient_memory.progress.runtime import schedule, process_once
+                    schedule(db)
+                    matter_result = process_once(db)
+                    if matter_result:
+                        print(matter_result, flush=True)
                     if agent_result:
                         print(agent_result, flush=True)
                     if result:
