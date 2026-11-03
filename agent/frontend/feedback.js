@@ -21,7 +21,7 @@ async function refreshAgentFeedback(notify=true){
     agentFeedbackInitialized=true;agentFeedbackData=data;
     const count=document.getElementById('agentFeedbackCount');if(count)count.textContent=data.counts.attention+' 项待处理';
     const status=document.getElementById('agentFeedbackStatus');if(status)status.textContent=`待审核 ${data.counts.pending_review} 项 · 调查中 ${data.counts.running} 项 · 每 5 秒自动更新`;
-    const home=document.getElementById('agentFeedbackHome');if(home&&(changed||!home.children.length))home.innerHTML=agentFeedbackCards(data.items.slice(0,5))||'<p class="section-note" style="padding:16px 20px">尚无 Agent 调查反馈。请在检验随访任务中启用 Agent，随后报告和病程事件会触发跟进。</p>';
+    const home=document.getElementById('agentFeedbackHome');if(home&&(changed||!home.children.length))home.innerHTML=agentFeedbackCards(data.items.slice(0,5))||'<p class="section-note" style="padding:16px 20px">此区域展示已启用的检验随访调查。问诊／查房自动提取的候选和进展请进入患者详情的“待跟进事项”查看。</p>';
     const inbox=document.getElementById('agentInboxList');if(inbox&&(changed||inbox.textContent.includes('正在读取')))inbox.innerHTML=agentFeedbackCards(data.items)||'<p>当前没有 Agent 调查记录。</p>';
     const inboxCount=document.getElementById('agentInboxCount');if(inboxCount)inboxCount.textContent=data.counts.attention+' 项需要医生处理';
     document.querySelectorAll('[data-agent-task-summary]').forEach(box=>{box.innerHTML=agentTaskSummaryHtml(Number(box.dataset.agentTaskSummary));});
@@ -29,7 +29,7 @@ async function refreshAgentFeedback(notify=true){
   finally{agentFeedbackBusy=false;}
 }
 async function openAgentInbox(){
-  document.getElementById('panelTitle').textContent='Agent 工作反馈';
+  document.getElementById('panelTitle').textContent='检验随访 Agent 反馈';
   document.getElementById('panelSub').textContent='负责患者的调查结果、待审核计划与失败处理';
   document.getElementById('panelBody').innerHTML='<p id="agentInboxCount"></p><div id="agentInboxList">正在读取反馈…</div>';
   document.getElementById('panelModal').classList.add('show');

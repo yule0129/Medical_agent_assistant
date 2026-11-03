@@ -1,4 +1,4 @@
-"""Direct bedside transcript capture. No model calls, note generation or review queue."""
+"""Direct transcript capture; completion queues plan extraction, never a summary."""
 from datetime import datetime, timezone
 from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException
@@ -126,5 +126,7 @@ def complete_bedside(session_id: int, payload: BedsideFinish, db: Session = Depe
         raise HTTPException(409, '请先保存当前查房文字并核对版本')
     row.status, row.ended_at, row.version = 'COMPLETED', datetime.now(timezone.utc), row.version+1
     audit(db, row, payload.doctor_id, 'COMPLETE_BEDSIDE_ROUNDING')
+    from agent.patient_memory.automatic import enqueue
+    enqueue(db,encounter,payload.doctor_id,'ROUNDING',row.id)
     db.commit()
     return result(db, row)

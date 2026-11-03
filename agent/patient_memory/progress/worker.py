@@ -13,6 +13,10 @@ def main():
         while True:
             try:
                 with SessionLocal() as db:
+                    from agent.patient_memory import automatic
+                    automatic.schedule(db)
+                    extracted=automatic.process_once(db)
+                    if extracted:print(extracted,flush=True)
                     schedule(db);result=process_once(db)
                     if result:print(result,flush=True)
             except Exception as exc:

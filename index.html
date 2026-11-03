@@ -81,6 +81,9 @@
     textarea { width:100%; min-height:115px; border:1px solid #dfe6ee; border-radius:8px; padding:12px; resize:vertical; line-height:1.7; outline:none; } textarea:focus { border-color:#84b9ff; box-shadow:0 0 0 3px #1677ff13; }
     .draft { margin-top:15px; padding:13px; border-radius:8px; border:1px solid #d9eaff; background:#f7fbff; line-height:1.8; font-size:13px; }
     .modal-foot { padding:15px 22px; border-top:1px solid var(--line); display:flex; justify-content:flex-end; gap:10px; } .secondary { border:1px solid #d8e0e8; background:#fff; color:#526274; border-radius:7px; padding:9px 15px; }
+    #panelModal .modal-box { display:flex; flex-direction:column; overflow:hidden; }
+    #panelModal .modal-head, #panelModal .modal-foot { flex-shrink:0; background:#fff; }
+    #panelModal .modal-body { flex:1 1 auto; min-height:0; overflow-y:auto; }
     .toast { position:fixed; right:25px; bottom:25px; background:#173b5e; color:#fff; border-radius:8px; padding:12px 17px; font-size:13px; box-shadow:0 8px 25px #102a4340; transform:translateY(20px); opacity:0; pointer-events:none; transition:.25s; } .toast.show { transform:none; opacity:1; }
     .detail-list { display:grid; gap:10px; margin-top:14px; }
     .detail-row { display:flex; justify-content:space-between; gap:16px; padding:11px 12px; border:1px solid var(--line); border-radius:8px; font-size:12px; }
@@ -102,6 +105,18 @@
     @media (max-width:600px) { .patient-basic-grid { grid-template-columns:1fr; } .patient-basic-field { grid-template-columns:90px minmax(0,1fr); } }
     .admission-section { margin:18px 0; padding:16px; border:1px solid var(--line); border-radius:8px; background:#fbfdff; }
     .admission-section h3 { margin-top:0; color:#284b6c; }
+    .matter-flow { padding:12px 16px; background:#f1f6fc; border-radius:8px; color:#284b6c; font-weight:600; }
+    .matter-flow span { margin:0 12px; color:#8a9aab; }
+    .matter-group { margin-top:22px; } .matter-card { background:#fff; }
+    .matter-card-heading { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; }
+    .matter-card-heading b { font-size:15px; line-height:1.6; }
+    .matter-card summary, .matter-tools>summary { cursor:pointer; padding:10px 0; color:#345776; }
+    .matter-progress-details, .matter-editor { margin-top:12px; border-top:1px solid var(--line); }
+    .matter-tools { margin-top:24px; border-top:1px solid var(--line); }
+    .matter-quote mark { background:#fff0bf; color:#624600; border-radius:2px; padding:1px 2px; }
+    .matter-completion { padding:16px; margin:12px 0; border:1px solid #bfd3e9; border-radius:8px; background:#f5f9ff; }
+    .matter-completion h4 { margin:0 0 8px; }
+    .matter-completion textarea { width:100%; min-height:100px; box-sizing:border-box; }
     .admission-section textarea { min-height:150px; margin-top:8px; }
     #admissionContent { min-height:320px; }
     #admissionTrace { overflow-wrap:anywhere; margin-top:18px; }
@@ -180,7 +195,7 @@
           <div class="workflow-home-actions"><button class="primary" onclick="openBedsideRounding()">＋ 开始真实查房</button><button class="secondary" onclick="openWorkflowPanel()">查看完整工作流</button><span id="homeWorkflowHint" class="section-note">后端连接后显示真实状态</span></div>
         </div>
         <section class="card" id="agentFeedbackCard" aria-live="polite" style="margin-bottom:20px">
-          <div class="card-head"><div><div class="card-title">Agent 工作反馈</div><p class="section-note" id="agentFeedbackStatus">正在读取调查反馈…</p></div><button class="secondary" onclick="openAgentInbox()" id="agentFeedbackCount">查看全部反馈</button></div>
+          <div class="card-head"><div><div class="card-title">检验随访 Agent 反馈</div><p class="section-note" id="agentFeedbackStatus">正在读取调查反馈…</p></div><button class="secondary" onclick="openAgentInbox()" id="agentFeedbackCount">查看全部反馈</button></div>
           <div id="agentFeedbackHome"></div>
         </section>
         <div class="grid">
@@ -220,7 +235,7 @@
     function switchNav(button, label){ document.querySelectorAll('.nav-item').forEach(item=>item.classList.remove('active')); button.classList.add('active'); if(label==='工作概览'){ window.scrollTo({top:0,behavior:'smooth'}); return; } if(label==='我的患者'){ document.querySelector('.card-title').scrollIntoView({behavior:'smooth',block:'center'}); document.getElementById('search').focus(); return; } if(label==='查房记录'){ openBedsideRounding(); return; } if(label==='任务安排'){openTaskSchedule();return;} if(label==='临床工作流'){ openWorkflowPanel(); return; } openPanel(label); }
     function viewAllPatients(){ document.getElementById('search').value=''; renderPatients(patients); document.querySelector('.card-title').scrollIntoView({behavior:'smooth',block:'center'}); showToast('已展示全部负责患者'); }
     function openPanel(title){ if(title==='系统通知'){openAgentInbox();return;} if(title==='最近动态'){openWorkflowPanel();return;} if(title==='查房记录'){openBedsideRounding();return;} if(title==='病历文书'){openRecordList();return;} if(title==='任务安排'){openTaskSchedule();return;} if(title==='交班摘要'){openHandoff();return;} const data={
-      '病历文书':{sub:'病历文书管理 · 点击记录查看正文',body:renderRecordList(),action:'新建病历'},
+      '病历文书':{sub:'按入院时间从近到远，同次住院按记录时间倒序 · 点击查看正文',body:renderRecordList(),action:'新建病历'},
       '查房记录':{sub:'查房记录工作量',body:'<div class="detail-list"><div class="detail-row"><span>今日计划查房</span><span>5 位患者</span></div><div class="detail-row"><span>已完成</span><span style="color:var(--green)">3 位患者</span></div><div class="detail-row"><span>待完成</span><span style="color:var(--orange)">2 位患者</span></div></div><p class="section-note" style="margin-top:16px">点击“开始查房”进入患者查房记录流程。</p>',action:'开始查房'},
       '使用统计':{sub:'智能病历辅助使用统计',body:'<div class="record-grid"><div class="record-box"><small>本周生成草稿</small><b>18 份</b></div><div class="record-box"><small>平均修改率</small><b>22%</b></div><div class="record-box"><small>累计节省时间</small><b>2.4 小时</b></div></div><div class="detail-list"><div class="detail-row"><span>草稿采纳率</span><span style="color:var(--green)">86%</span></div><div class="detail-row"><span>本周使用天数</span><span>4 天</span></div></div>',action:'关闭'},
       '交班摘要':{sub:'根据今日患者信息生成摘要',body:'<div class="draft" style="display:block"><b style="color:#2465a8">✦ 今日交班摘要（模拟）</b><p style="margin:8px 0;line-height:1.8">当前病区共12位患者，其中3位患者需重点关注。李秀兰咳嗽症状较前改善；王建国血钾3.2 mmol/L，建议交班时重点提醒；陈明远今日仍有夜间喘息。</p></div>',action:'保存摘要'},
@@ -234,7 +249,7 @@
     function renderRecordList(){ return '<div class="toolbar" style="padding-top:0"><div class="search"><span>⌕</span><input placeholder="搜索患者、住院号或文书类型" oninput="filterRecordList(this.value)" /></div><select id="recordStatus" onchange="filterRecordList()"><option value="">全部状态</option><option value="待审核">待审核</option><option value="已签署">已签署</option></select></div><div id="recordListTable">'+recordTable(medicalRecords)+'</div>'; }
     function filterRecordList(value){ const input=value===undefined?'':value; const status=document.getElementById('recordStatus')?document.getElementById('recordStatus').value:''; const q=input||((document.querySelector('#panelBody .search input')||{}).value||''); document.getElementById('recordListTable').innerHTML=recordTable(medicalRecords.filter(r=>((r.patient||'')+(r.admission_number||r.admission||'')+(r.record_type||r.type||'')).includes(q)&&(!status||r.status===status))); }
     function editMedicalRecord(id){ document.getElementById('recordTextView').style.display='none'; document.getElementById('recordEditor').style.display='block'; document.getElementById('panelAction').textContent='保存修改'; document.getElementById('panelAction').onclick=()=>saveMedicalRecord(id); }
-    function openRecordList(){ document.getElementById('panelTitle').textContent='病历文书'; document.getElementById('panelSub').textContent='病历文书管理 · 点击记录查看正文'; document.getElementById('panelBody').innerHTML=renderRecordList(); document.getElementById('panelAction').textContent='新建病历'; document.getElementById('panelAction').onclick=()=>{closePanel();openRound();}; loadBackendRecords().catch(error=>showToast(error.message)); }
+    function openRecordList(){ document.getElementById('panelTitle').textContent='病历文书'; document.getElementById('panelSub').textContent='按入院时间从近到远，同次住院按记录时间倒序 · 点击查看正文'; document.getElementById('panelBody').innerHTML=renderRecordList(); document.getElementById('panelAction').textContent='新建病历'; document.getElementById('panelAction').onclick=()=>{closePanel();openRound();}; loadBackendRecords().catch(error=>showToast(error.message)); }
     function executePanelAction(title){ if(title==='病历文书'){ closePanel(); openRound(); return; } if(title==='查房记录'||title==='新建病历文书'){ closePanel(); openRound(); return; } closePanel(); showToast(title+'操作已完成（模拟）'); }
     function workflowStatusTag(status){ const map={CANDIDATE:['待医生确认','orange'],WAITING_EVENT:['等待外部结果','blue'],RESULT_AVAILABLE:['结果待查看','orange'],ACKNOWLEDGED:['已确认待处理','blue'],RESOLVED:['已完成','green'],REJECTED:['已驳回','orange'],CANCELLED:['已取消','orange']}; const item=map[status]||[status,'blue']; return '<span class="tag '+item[1]+'">'+item[0]+'</span>'; }
     function closePanel(){ document.getElementById('panelModal').classList.remove('show'); }
@@ -243,15 +258,15 @@
     document.getElementById('roundModal').addEventListener('click',e=>{if(e.target.id==='roundModal')closeRound()});
     document.getElementById('panelModal').addEventListener('click',e=>{if(e.target.id==='panelModal')closePanel()});
   </script>
-  <script src="agent/frontend/matter-actions.js?v=eb1918aaa8de"></script>
-  <script src="agent/frontend/matter-progress.js?v=9286da3c6a7b"></script>
-  <script src="agent/frontend/patient-matters.js?v=2039026e2649"></script>
-  <script src="frontend/bedside-rounding.js?v=0297c2849790"></script>
-  <script src="frontend/patient-history.js?v=86c09f355154"></script>
-  <script src="agent/frontend/admission.js?v=6c77d23ab6cd"></script>
+  <script src="agent/frontend/matter-actions.js?v=ffbdaebdc4d0"></script>
+  <script src="agent/frontend/matter-progress.js?v=89736bfcbb78"></script>
+  <script src="agent/frontend/patient-matters.js?v=caa946aa9d2a"></script>
+  <script src="frontend/bedside-rounding.js?v=8c438d170ddb"></script>
+  <script src="frontend/patient-history.js?v=9a938ed41af4"></script>
+  <script src="agent/frontend/admission.js?v=89d1b784ea9f"></script>
   <script src="frontend/report-followup.js?v=0064e4d3c82b"></script>
-  <script src="agent/frontend/feedback.js?v=32f349d046d8"></script>
+  <script src="agent/frontend/feedback.js?v=c74927c9c8d4"></script>
   <script src="agent/frontend/workspace.js?v=e6a1f870088f"></script>
-  <script src="frontend/workflow.js?v=64907ec38044"></script>
+  <script src="frontend/workflow.js?v=94003e456c35"></script>
 </body>
 </html>

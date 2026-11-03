@@ -64,11 +64,13 @@ async function openBedsideRounding(patientId=null,encounterId=null,roundingId=nu
       <p><button class="secondary bedside-control" id="saveBedsideDraft" ${(done||closed)?'disabled':''} onclick="saveBedsideRounding(false)">暂存问诊文字</button>
       <button class="secondary" id="newBedsideRounding" ${closed?'disabled':''} onclick="openBedsideRounding(${patientId},${encounterId},null,true)">＋ 新一次查房</button>
       <button class="secondary" onclick="openPatientHistory(${patientId},${encounterId},'roundings')">查看历次查房</button></p>
-      ${data?`<button class="secondary" id="bedsideMattersButton" onclick="openSavedSourceMatters(${patientId},${encounterId},'ROUNDING',${data.id})">识别已保存问诊中的跟进事项</button>`:''}
+      ${data?`<button class="secondary" id="bedsideMattersButton" onclick="openSavedSourceMatters(${patientId},${encounterId},'ROUNDING',${data.id})">查看自动提取的候选事项</button>`:''}
+      <section><h3>自动提取事项</h3><div data-extraction-encounter="${encounterId}">正在读取自动提取状态…</div></section>
       <p id="bedsideError" role="alert" style="color:#b42318"></p>`;
     document.getElementById('bedsideTranscript').value=data?.transcript||'';
     const originalStart=data?.started_at||new Date().toISOString();const time=new Date(originalStart);document.getElementById('bedsideTime').value=new Date(time-time.getTimezoneOffset()*60000).toISOString().slice(0,19);bedsideView.originalStart=originalStart;bedsideView.displayedTime=document.getElementById('bedsideTime').value;
     button.disabled=done||closed;button.textContent=done?'本次查房已完成':'保存并完成本次查房';button.onclick=()=>saveBedsideRounding(true);
+    refreshMatterProgress();
   }catch(error){if(request===patientDetailRequest&&container===document.getElementById('bedsideView'))container.textContent='查房资料读取失败：'+error.message;}
 }
 async function saveBedsideRounding(complete){
@@ -84,7 +86,7 @@ async function saveBedsideRounding(complete){
     let row=await workflowFetch('/bedside-roundings'+(view.row?'/'+view.row.id:''),{method:view.row?'PUT':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
     view.row=row;
     if(complete)row=await postWorkflow(`/bedside-roundings/${row.id}/complete`,{doctor_id:1,expected_version:row.version});
-    showToast(complete?'本次查房已完成，首次查房待办已更新':'问诊文字已暂存，查房待办仍保留');
+    showToast(complete?'查房已完成，Agent将自动提取候选事项':'问诊文字已暂存，完成查房后自动提取事项');
     if(view===bedsideView)await openBedsideRounding(view.patientId,view.encounterId,row.id);
     await loadBackendPatients();await refreshDashboardTotals();
   }catch(exc){if(view===bedsideView){error.textContent='保存失败：'+exc.message+'。文字已保留。';document.querySelectorAll('.bedside-control,#panelAction').forEach(b=>b.disabled=false);}else showToast(exc.message);}

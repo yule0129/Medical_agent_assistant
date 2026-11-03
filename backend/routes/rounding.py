@@ -70,6 +70,8 @@ def finish_rounding(session_id: int, payload: RoundingFinish, db: Session = Depe
     db.add(AuditLog(actor_type="DOCTOR", actor_id=str(payload.doctor_id), action="FINISH_ROUNDING",
         resource_type="RoundingSession", resource_id=str(row.id),
         new_state={"status": "COMPLETED", "open_task_count": summary["open_task_count"]}, created_at=row.ended_at))
+    from agent.patient_memory.automatic import enqueue
+    enqueue(db,db.get(Encounter,row.encounter_id),payload.doctor_id,'ROUNDING',row.id)
     db.commit()
     return rounding_summary(db, row)
 

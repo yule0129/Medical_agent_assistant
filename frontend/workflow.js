@@ -23,9 +23,13 @@ async function workflowFetch(path, options) {
 }
 const postWorkflow = (path, data) => workflowFetch(path, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)});
 
+function recordEncounterLabel(r) {
+  const current=patients.find(p=>p.backendPatientId===r.patient_id)?.encounterId;
+  return encounterLabel(r.encounter_id?{id:r.encounter_id,status:r.encounter_status,encounter_number:r.encounter_number,admitted_at:r.admitted_at}:null,current);
+}
 function recordTable(list) {
   if(!list.length) return '<p class="section-note">暂无符合条件的病历文书。</p>';
-  return '<table class="clinical-table"><thead><tr><th>患者</th><th>住院号</th><th>文书类型</th><th>时间</th><th>状态</th></tr></thead><tbody>'+list.map(r=>`<tr onclick="openMedicalRecord(${Number(r.id)})"><td>${html(r.patient)} · ${html(r.bed)}</td><td>${html(r.admission_number)}</td><td>${html(r.record_type)}</td><td>${html(r.time)}</td><td>${html(r.status)}</td></tr>`).join('')+'</tbody></table>';
+  return '<table class="clinical-table"><thead><tr><th>患者</th><th>所属住院</th><th>文书类型</th><th>时间</th><th>状态</th></tr></thead><tbody>'+list.map(r=>`<tr onclick="openMedicalRecord(${Number(r.id)})"><td>${html(r.patient)} · ${html(r.bed)}</td><td>${html(recordEncounterLabel(r))}</td><td>${html(r.record_type)}</td><td>${html(r.time)}</td><td>${html(r.status)}</td></tr>`).join('')+'</tbody></table>';
 }
 async function saveMedicalRecord(id) {
   try {
@@ -34,6 +38,9 @@ async function saveMedicalRecord(id) {
   }catch(error){showToast('保存失败：'+error.message);}
 }
 async function signMedicalRecord(id) {
+  const editor=document.getElementById('recordEditor');
+  const record=medicalRecords.find(r=>String(r.id)===String(id));
+  if(editor&&editor.value!==record?.content){showToast('正文有未保存修改，请先保存修改，再审核签署');return;}
   try {await postWorkflow('/medical-records/'+id+'/sign',{}); await openMedicalRecord(id,activeRecordHistory);await refreshDashboardTotals();showToast('模拟签署已保存');}
   catch(error){showToast('签署失败：'+error.message);}
 }
@@ -166,7 +173,8 @@ async function openMedicalRecord(id, historyContext=null) {
     document.getElementById('panelTitle').textContent=r.record_type+' · '+r.patient;
     document.getElementById('panelSub').textContent=r.record_number+' · '+r.status;
     document.getElementById('panelBody').innerHTML=`<div class="record-paper"><h3>${html(r.record_type)}</h3>
-      <div class="record-meta"><div>姓名：${html(r.patient)}</div><div>床号：${html(r.bed)}</div><div>本次住院：${html(r.encounter_number||r.admission_number)}</div><div>记录时间：${html(r.time)}</div></div>
+      <div class="record-meta"><div>姓名：${html(r.patient)}</div><div>床号：${html(r.bed)}</div><div>所属住院：${html(recordEncounterLabel(r))}</div><div>记录时间：${html(r.time)}</div></div>
+      ${r.status==='已签署'?'':`<p><button class="secondary" id="editRecordButton" onclick="editMedicalRecord(${Number(r.id)})">编辑病历正文</button></p>`}
       <div class="record-text" id="recordTextView"></div><textarea id="recordEditor" style="display:none;min-height:230px"></textarea>
       <div class="record-source">${r.source_rounding_session_id?'来源查房 #'+r.source_rounding_session_id:'病历文书'} · 生成内容需医生审核。</div>
       <button class="secondary" onclick="openWorkflowPanel()">查看关联任务</button> <button class="secondary" id="backToRecordHistory">${historyContext?'返回历史病历':'该患者历史病历'}</button> <button class="secondary" onclick="openRecordList()">全部病历列表</button>
@@ -179,7 +187,8 @@ async function openMedicalRecord(id, historyContext=null) {
       sign.textContent=admission?'进入入院记录审查':'审核并模拟签署';
       sign.onclick=()=>admission?openAdmissionRecord(r.patient_id,r.encounter_id):signMedicalRecord(r.id);
     }
-    const action=document.getElementById('panelAction'); action.disabled=false;action.textContent=r.status==='已签署'?'返回历史病历':'编辑病历'; action.onclick=()=>r.status==='已签署'?openPatientHistory(historyContext?.patientId||r.patient_id,historyContext?.encounterId||null):editMedicalRecord(r.id);
+    const action=document.getElementById('panelAction'); action.disabled=false;action.textContent=r.status==='已签署'?'返回历史病历':sign.textContent; action.onclick=()=>r.status==='已签署'?openPatientHistory(historyContext?.patientId||r.patient_id,historyContext?.encounterId||null):sign.click();
+    document.getElementById('panelBody').scrollTop=0;
     document.getElementById('panelModal').classList.add('show');
   } catch(error) { showToast('病历读取失败：'+error.message); }
 }

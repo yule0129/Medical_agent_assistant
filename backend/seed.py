@@ -81,6 +81,10 @@ def seed_demo(db: Session) -> dict[str, object]:
             db.add(row)
             db.flush()
         encounter_rows[number] = row
+        # This fixed synthetic stay predates the active admission. Do not infer
+        # discharge dates or rewrite any other encounter's clinical facts.
+        if number == "ENC-DEMO-001-B" and row.status == "INPATIENT":
+            row.status = "DISCHARGED"
         if row.recorded_at is None:
             row.recorded_at = row.admitted_at + timedelta(minutes=30)
         if not row.history_reporter or row.history_reporter == "未记录":

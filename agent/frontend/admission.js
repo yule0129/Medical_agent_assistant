@@ -55,7 +55,9 @@ async function openAdmissionRecord(patientId,encounterId=null){
     container.insertAdjacentHTML('beforebegin',patientTabs(patientId,'admission',profile.encounter_id));
     const signed=data.reviewed,locked=signed?'disabled':'',readonly=signed?'readonly':'';
     const reports=data.agent.sources.read_examinations.filter(s=>s.kind==='已接入检查报告');
-    container.innerHTML=`<label>住院记录 <select id="admissionEncounter" onchange="openAdmissionRecord(${patientId},Number(this.value))">${profile.encounters.map(e=>`<option value="${e.id}" ${e.id===profile.encounter_id?'selected':''}>${html(e.encounter_number)} · ${html(localTime(e.admitted_at))}</option>`).join('')}</select></label>
+    container.innerHTML=`<p id="admissionEncounterScope">${html(encounterLabel(profile.encounters.find(e=>e.id===profile.encounter_id),profile.current_encounter_id))}</p>
+      <p class="section-note">入院记录对应所选的一次住院；重新生成草稿会更新同一份记录，不新增另一份。既往住院记录保留供回顾。</p>
+      <label>住院记录 <select id="admissionEncounter" onchange="openAdmissionRecord(${patientId},Number(this.value))">${profile.encounters.map(e=>`<option value="${e.id}" ${e.id===profile.encounter_id?'selected':''}>${html(encounterLabel(e,profile.current_encounter_id))}</option>`).join('')}</select></label>
       <p>入院：${html(localTime(data.admitted_at))} · 截止：${html(localTime(data.due_at))}</p>
       <p id="admissionStatus" role="status">${html(admissionStatusText(data))}</p>
       <section class="admission-section"><h3>1 · 医生患者问诊记录</h3>
@@ -82,11 +84,13 @@ async function openAdmissionRecord(patientId,encounterId=null){
       ${(data.agent.draft.sections||[]).map(s=>`<p><b>${html(s.heading)}</b> · 来源：${html(s.source_ids.join('、')||'未提供')} ${s.missing?'· 待补充':''}</p>`).join('')}
       ${data.agent.error_code?`<p>生成状态：${html(data.agent.error_code)}</p>`:''}</details>
       ${data.agent.input_version?`<button class="secondary" onclick="openSavedSourceMatters(${patientId},${profile.encounter_id},'ADMISSION',null)">查看问诊中的待跟进事项</button>`:''}
+      <section><h3>自动提取事项</h3><div data-extraction-encounter="${profile.encounter_id}">正在读取自动提取状态…</div></section>
       <p id="admissionError" role="alert" style="color:#b42318"></p><button class="secondary" onclick="openTaskSchedule()">返回任务安排</button>`;
     document.getElementById('admissionTranscript').value=data.agent.transcript;
     document.getElementById('admissionExams').value=data.agent.examination_text;
     document.getElementById('admissionContent').value=data.record?.content||'';
     action.disabled=signed||!data.written;action.textContent=signed?'已审查并签署':'审查并签署';action.onclick=()=>admissionAction('review');
+    refreshMatterProgress();
   }catch(error){if(request===patientDetailRequest&&container===document.getElementById('admissionView'))container.textContent='入院记录读取失败：'+error.message;}
 }
 async function admissionAction(kind){
@@ -117,7 +121,7 @@ async function admissionAction(kind){
       if(kind==='review'){payload.confirmed=true;payload.expected_source_digest=data.agent.source_digest;}
       data=await workflowFetch(`/patients/${patientId}/admission-${kind==='review'?'review':'record'}`,{method:kind==='review'?'POST':'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
     }
-    showToast({inputs:'问诊与检查资料已保存',generate:'Agent草稿已生成，请审查来源、缺项及正文',draft:'修改已保存，审查待办仍保留',review:'已审查并签署，入院记录待办已完成'}[kind]);
+    showToast({inputs:'资料已保存，Agent将自动提取候选事项',generate:'Agent草稿已生成，请审查来源、缺项及正文',draft:'修改已保存，审查待办仍保留',review:'已审查并签署，入院记录待办已完成'}[kind]);
     if(view===admissionCurrent)await openAdmissionRecord(patientId,encounterId);
     await refreshDashboardTotals();await loadBackendRecords();
   }catch(error){

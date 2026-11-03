@@ -52,6 +52,10 @@ def test_profile_uses_selected_authorized_admission_and_patient_identity(client)
     assert http.get('/api/patients/1/profile').json()['encounter_id']==1
     selected=http.get('/api/patients/1/profile?encounter_id=2').json()
     assert selected['history_reporter']=='上次住院陈述者' and datetime.fromisoformat(selected['admitted_at'])==old
+    assert selected['current_encounter_id']==1 and selected['encounter_status']=='DISCHARGED'
+    history=http.get('/api/patients/1/history').json()
+    assert history['current_encounter_id']==1
+    assert {e['id']:e['status'] for e in history['encounters']}=={1:'INPATIENT',2:'DISCHARGED'}
     assert http.get('/api/patients/1/profile?encounter_id=3').status_code==404
     assert http.get('/api/patients/2/profile').status_code==403
     scoped=http.get('/api/patients/1/profile?doctor_id=2').json()

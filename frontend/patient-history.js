@@ -27,6 +27,12 @@ function patientTabs(patientId,active,encounterId=null,admissionEncounterId=enco
   </nav>`;
 }
 function patientValue(value) {return value===null||value===undefined||String(value).trim()===''?'未记录':String(value);}
+function encounterLabel(encounter,currentId) {
+  if(!encounter)return '未关联住院';
+  const state={INPATIENT:'住院中',DISCHARGED:'已出院'}[encounter.status]||encounter.status||'状态未记录';
+  const scope=encounter.id===currentId?'本次住院':encounter.status==='DISCHARGED'?'既往住院':'其他住院';
+  return `${scope} · ${state} · ${encounter.encounter_number} · 入院 ${localTime(encounter.admitted_at)}`;
+}
 async function openPatientDetailById(id,encounterId=null) {
   const p=patients.find(p=>p.backendPatientId===id);if(!p)return;
   const request=++patientDetailRequest;++historyRequest;
@@ -51,8 +57,8 @@ async function openPatientDetailById(id,encounterId=null) {
       ['入院时间',data.admitted_at?localTime(data.admitted_at):null],['记录时间',data.recorded_at?localTime(data.recorded_at):null],['病史陈述者',data.history_reporter]];
     container.innerHTML=`<div class="patient-overview"><div class="patient-avatar">${html(data.name[0]||'患')}</div><div><b>${html(data.name)}</b><p>${html(patientValue(data.diagnosis))}</p></div></div>
       <h3>患者基本信息</h3><dl class="patient-basic-grid" id="patientBasicInfo">${fields.map(([label,value])=>`<div class="patient-basic-field"><dt>${html(label)}</dt><dd>${html(patientValue(value))}</dd></div>`).join('')}</dl>
-      <p>住院记录：${html(patientValue(data.encounter_number))}</p>
-      ${data.encounters.length>1?`<label>查看住院资料 <select id="profileEncounter" onchange="openPatientDetailById(${id},Number(this.value))">${data.encounters.map(e=>`<option value="${e.id}" ${e.id===data.encounter_id?'selected':''}>${html(e.encounter_number)} · ${html(localTime(e.admitted_at))}</option>`).join('')}</select></label>`:''}
+      <p id="profileEncounterScope">${html(encounterLabel(data.encounters.find(e=>e.id===data.encounter_id),data.current_encounter_id))}</p>
+      ${data.encounters.length>1?`<label>查看住院资料 <select id="profileEncounter" onchange="openPatientDetailById(${id},Number(this.value))">${data.encounters.map(e=>`<option value="${e.id}" ${e.id===data.encounter_id?'selected':''}>${html(encounterLabel(e,data.current_encounter_id))}</option>`).join('')}</select></label>`:''}
       <p class="section-note" style="margin-top:16px">姓名等资料来自患者档案；入院时间、记录时间和病史陈述者按所选住院展示。缺失项目显示“未记录”。</p>
       ${p.latestRoundingId?`<button class="secondary" onclick="continueRounding(${p.latestRoundingId},${p.encounterId})">查看／继续上次查房</button>`:''}`;
   }catch(error){if(request===patientDetailRequest&&container===document.getElementById('patientDetailView')){container.textContent='基本信息读取失败：'+error.message;const retry=document.createElement('button');retry.className='secondary';retry.textContent='重试';retry.onclick=()=>openPatientDetailById(id,selectedEncounter);container.append(retry);}}
@@ -83,17 +89,18 @@ async function openPatientHistory(patientId, encounterId=null, view='records') {
     const data=await workflowFetch(`/patients/${patientId}/history?doctor_id=1`+(encounterId?`&encounter_id=${encounterId}`:''));
     if(request!==historyRequest||container!==document.getElementById('patientHistoryList'))return;
     document.getElementById('panelTitle').textContent=(selectedView==='roundings'?'查房记录':'历史病历')+' · '+data.patient.name;
-    document.getElementById('panelSub').textContent=`${data.records.length} 份病历 · ${data.roundings.length} 次查房 · 按时间倒序`;
+    document.getElementById('panelSub').textContent=`${data.records.length} 份病历 · ${data.roundings.length} 次查房 · ${selectedView==='records'?'按入院时间从近到远，同次住院按记录时间倒序':'按查房时间从近到远'}`;
     const p=patients.find(p=>p.backendPatientId===patientId);
     action.disabled=!p?.encounterId;
-    container.previousElementSibling.outerHTML=patientTabs(patientId,selectedView,encounterId);
+    container.previousElementSibling.outerHTML=patientTabs(patientId,selectedView,encounterId,encounterId||data.current_encounter_id);
     container.innerHTML=`<div class="workflow-toolbar"><label>患者 <select id="historyPatient" onchange="openPatientHistory(Number(this.value),null,'${selectedView}')">${patients.map(p=>`<option value="${p.backendPatientId}" ${p.backendPatientId===patientId?'selected':''}>${html(p.name)} · ${html(p.bed)}</option>`).join('')}</select></label>
-      <label>住院范围 <select id="historyEncounter" onchange="openPatientHistory(${patientId},this.value?Number(this.value):null,'${selectedView}')"><option value="">全部可访问住院</option>${data.encounters.map(e=>`<option value="${e.id}" ${e.id===encounterId?'selected':''}>${html(e.encounter_number)} · ${html(localTime(e.admitted_at))}</option>`).join('')}</select></label></div>
-      <div class="workflow-grid" style="grid-template-columns:1fr"><section id="historyRecordsSection" ${selectedView==='records'?'':'hidden'}><h3>历史病历（${data.records.length}）</h3><div class="detail-list" id="historyRecords">${data.records.map(r=>`<div class="workflow-item" data-history-record="${r.id}"><div><b>${html(r.record_type)}</b> <span class="tag ${r.status==='已签署'?'green':'orange'}">${html(r.status)}</span>
-        <p>${html(localTime(r.created_at))} · ${html(r.author)}</p><small>${html(r.encounter_number||'未关联住院')} · ${html(r.record_number)}${r.source_rounding_session_id?' · 查房 #'+r.source_rounding_session_id:''}</small>
+      <label>住院范围 <select id="historyEncounter" onchange="openPatientHistory(${patientId},this.value?Number(this.value):null,'${selectedView}')"><option value="">全部住院（含既往住院）</option>${data.encounters.map(e=>`<option value="${e.id}" ${e.id===encounterId?'selected':''}>${html(encounterLabel(e,data.current_encounter_id))}</option>`).join('')}</select></label></div>
+      <p class="section-note">${encounterId?'当前只展示所选住院的记录。':'当前汇总历次住院的记录。'}入院记录按每次住院分别保存；同一患者不同住院的记录不是重复文书。新一次查房始终进入当前住院。</p>
+      <div class="workflow-grid" style="grid-template-columns:1fr"><section id="historyRecordsSection" ${selectedView==='records'?'':'hidden'}><h3>历史病历（${data.records.length}）</h3><div class="detail-list" id="historyRecords">${data.records.map((r,index)=>`${index===0||data.records[index-1].encounter_id!==r.encounter_id?`<h4 class="history-admission-heading">${html(encounterLabel(data.encounters.find(e=>e.id===r.encounter_id),data.current_encounter_id))}</h4>`:''}<div class="workflow-item" data-history-record="${r.id}"><div><b>${html(r.record_type)}</b> <span class="tag ${r.status==='已签署'?'green':'orange'}">${html(r.status)}</span>
+        <p class="record-encounter-scope">${html(encounterLabel(data.encounters.find(e=>e.id===r.encounter_id),data.current_encounter_id))}</p><p>${html(localTime(r.created_at))} · ${html(r.author)}</p><small>${html(r.record_number)}${r.source_rounding_session_id?' · 查房 #'+r.source_rounding_session_id:''}</small>
         <p>${html(r.preview)}</p><button class="primary" onclick="openMedicalRecord(${r.id},{patientId:${patientId},encounterId:${encounterId||'null'}})">查看病历正文</button></div></div>`).join('')||'<p>该范围内暂无病历。</p>'}</div></section>
       <section id="historyRoundingsSection" ${selectedView==='roundings'?'':'hidden'}><h3>历次查房（${data.roundings.length}）</h3><div class="detail-list" id="historyRoundings">${data.roundings.map(r=>`<div class="workflow-item" data-history-rounding="${r.id}"><div><b>查房 #${r.id} · ${html(localTime(r.started_at))}</b> <span class="tag ${r.status==='COMPLETED'?'green':'orange'}">${r.status==='COMPLETED'?'已结束':r.status==='DRAFT'?'草稿':'待结束'}</span>
-        <p>${html(r.encounter_number)}</p><p>${r.record_mode==='TRANSCRIPT'?'查房问诊原文 · 无需总结审查':`候选待处理 ${r.candidate_count} · 后续待办 ${r.open_task_count} · 已完成 ${r.completed_task_count}`}</p>
+        <p>${html(encounterLabel(data.encounters.find(e=>e.id===r.encounter_id),data.current_encounter_id))}</p><p>${r.record_mode==='TRANSCRIPT'?'查房问诊原文 · 无需总结审查':`候选待处理 ${r.candidate_count} · 后续待办 ${r.open_task_count} · 已完成 ${r.completed_task_count}`}</p>
         <button class="secondary" onclick="openRoundingHistory(${r.id},${patientId},${encounterId||'null'})">查看查房原文</button> <button class="secondary" onclick="continueRounding(${r.id},${r.encounter_id},${patientId})">${r.record_mode==='TRANSCRIPT'?'查看／继续查房':'查看关联任务／继续处理'}</button></div></div>`).join('')||'<p>该范围内暂无查房记录。</p>'}</div></section></div>`;
   }catch(error){if(request===historyRequest&&container===document.getElementById('patientHistoryList')){container.textContent='历史读取失败：'+error.message;const retry=document.createElement('button');retry.className='secondary';retry.textContent='重试';retry.onclick=()=>openPatientHistory(patientId,encounterId,selectedView);container.append(retry);}}
 }

@@ -12,6 +12,9 @@ def test_demo_profiles_repeat_without_overwriting_existing_data():
     with Session(engine) as db:
         first = seed_demo(db)
         assert first["patients"] == 8 and first["records_inserted"] == 8
+        historical = db.scalar(select(Encounter).where(Encounter.encounter_number == "ENC-DEMO-001-B"))
+        assert historical.status == "DISCHARGED" and historical.discharged_at is None
+        historical.status = "INPATIENT"  # Repair legacy synthetic data on reseed.
         patient = db.scalar(select(Patient).where(Patient.admission_number == "P-DEMO-001"))
         patient.occupation = "已维护的职业"
         encounter = db.scalar(select(Encounter).where(Encounter.patient_id == patient.id))
@@ -21,6 +24,7 @@ def test_demo_profiles_repeat_without_overwriting_existing_data():
         db.add(Patient(name="其他患者", admission_number="OTHER", bed_number="99", diagnosis="测试"))
         db.commit()
         second = seed_demo(db)
+        assert historical.status == "DISCHARGED"
         assert second["records_inserted"] == 0
         assert db.scalar(select(func.count()).select_from(Patient)) == 9
         assert db.scalar(select(func.count()).select_from(Encounter)) == 9

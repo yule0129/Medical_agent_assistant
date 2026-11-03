@@ -87,6 +87,8 @@ def extract_matters(db, encounter, doctor_id, kind, source_id, expected_digest):
                         source_id=source_id,source_digest=source['digest'],status='RUNNING',created_at=now)
         db.add(scan);db.flush()
     else:scan.status,scan.created_at,scan.error_code='RUNNING',now,None
+    scan.attempt=(scan.attempt or 0)+1
+    scan.retry_at=None
     known=[{'id':r.id,'title':r.title,'kind':r.kind,'status':r.status} for r in db.scalars(
         select(PatientMatter).where(PatientMatter.encounter_id==encounter.id,PatientMatter.status.in_(['OPEN','COMPLETED'])))]
     scan_id,encounter_id,patient_id=scan.id,encounter.id,encounter.patient_id
@@ -103,7 +105,9 @@ def extract_matters(db, encounter, doctor_id, kind, source_id, expected_digest):
         db.scalar(select(Encounter).where(Encounter.id==encounter_id).with_for_update())
         scan=db.get(MatterScan,scan_id)
         if utc(scan.created_at)==now:
-            scan.status,scan.error_code,scan.finished_at='FAILED',code,datetime.now(timezone.utc);db.commit()
+            scan.status,scan.error_code,scan.finished_at='FAILED',code,datetime.now(timezone.utc)
+            scan.retry_at=scan.finished_at+timedelta(seconds=30*scan.attempt) if scan.attempt<3 else None
+            db.commit()
         raise HTTPException(502,'Agent事项识别失败，原文已保留：'+code) from None
     db.expire_all()
     encounter=db.scalar(select(Encounter).where(Encounter.id==encounter_id).with_for_update())
@@ -111,19 +115,22 @@ def extract_matters(db, encounter, doctor_id, kind, source_id, expected_digest):
     try: require_scope(db,encounter_id,doctor_id)
     except ValueError as exc:raise HTTPException(403,'医生范围已变化，请重新加载') from exc
     fresh=current_source(db,encounter,kind,source_id)
-    if fresh['digest']!=source['digest'] or utc(scan.created_at)!=now:
+    if fresh['digest']!=source['digest'] or utc(scan.created_at)!=now or encounter.status!='INPATIENT':
         if utc(scan.created_at)==now:
             scan.status,scan.error_code='STALE','SOURCE_CHANGED';db.commit()
         raise HTTPException(409,'识别期间原文已变化，旧候选未纳入，请刷新后重试')
+    added_keys=set()
     for proposal in extracted.items:
         matter_key=digest((key,proposal.kind,proposal.quote,proposal.due_text))
+        if matter_key in added_keys:continue
         if db.scalar(select(PatientMatter.id).where(PatientMatter.matter_key==matter_key)):continue
+        added_keys.add(matter_key)
         db.add(PatientMatter(matter_key=matter_key,scan_id=scan_id,patient_id=patient_id,encounter_id=encounter_id,
             kind=proposal.kind,title=proposal.title,quote=proposal.quote,due_text=proposal.due_text,
             source=source,status='CANDIDATE',created_at=now,updated_at=now))
     scan.status,scan.model,scan.finished_at='READY',provider.model,datetime.now(timezone.utc)
     db.add(AuditLog(actor_type='AGENT',actor_id='patient-memory',action='EXTRACT_PATIENT_MATTERS',
         resource_type='MatterScan',resource_id=str(scan_id),new_state={'source_digest':source['digest'],
-        'candidate_count':len(extracted.items),'model':provider.model},created_at=scan.finished_at))
+        'candidate_count':len(added_keys),'model':provider.model},created_at=scan.finished_at))
     db.commit()
-    return {'scan_id':scan_id,'status':'READY','cached':False,'candidate_count':len(extracted.items)}
+    return {'scan_id':scan_id,'status':'READY','cached':False,'candidate_count':len(added_keys)}

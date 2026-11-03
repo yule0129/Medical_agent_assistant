@@ -265,6 +265,9 @@ def test_history_separates_admissions_and_enforces_patient_scope(client):
     other = save_round(http, patient_id=2,encounter_id=3,request_key='other-patient',transcript='同名另一患者').json()
     history = http.get('/api/patients/1/history').json()
     assert {r['id'] for r in history['records']} == {current['record_id'],old['record_id']}
+    # A later-entered document from an older stay must not precede the current stay.
+    assert [r['id'] for r in history['records']] == [current['record_id'],old['record_id']]
+    assert [r['id'] for r in http.get('/api/medical-records?patient_id=1').json()] == [current['record_id'],old['record_id']]
     assert {e['id'] for e in history['encounters']} == {1,2}
     assert http.get('/api/patients/1/history?encounter_id=1').json()['roundings'][0]['id'] == current['id']
     assert [r['id'] for r in http.get('/api/patients/1/history?encounter_id=2').json()['records']] == [old['record_id']]

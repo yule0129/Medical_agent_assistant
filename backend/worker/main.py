@@ -24,6 +24,10 @@ def main() -> None:
                     schedule_due(db)
                     agent_result = process_agent_once(db)
                     from agent.patient_memory.progress.runtime import schedule, process_once
+                    from agent.patient_memory import automatic
+                    automatic.schedule(db)
+                    extracted=automatic.process_once(db)
+                    if extracted:print(extracted,flush=True)
                     schedule(db)
                     matter_result = process_once(db)
                     if matter_result:

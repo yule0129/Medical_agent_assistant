@@ -63,6 +63,9 @@ def save_admission_inputs(patient_id: int, payload: AdmissionInputs, db: Session
         resource_type='Encounter', resource_id=str(encounter.id), old_state={},
         new_state={'input_version': row.input_version, 'transcript': row.transcript, 'examination_text': row.examination_text},
         created_at=datetime.now(timezone.utc)))
+    if row.transcript.strip():
+        from agent.patient_memory.automatic import enqueue
+        enqueue(db,encounter,payload.doctor_id,'ADMISSION',row.id)
     db.commit()
     return admission_state(db, encounter)
 
@@ -174,6 +177,8 @@ def patient_profile(patient_id: int, encounter_id: int | None = None, doctor_id:
         encounter = next((row for row in accessible if row.status == "INPATIENT"), accessible[0] if accessible else None)
     return {
         "id": patient.id, "name": patient.name, "gender": patient.gender, "age": patient.age,
+        "current_encounter_id": next((row.id for row in accessible if row.status == "INPATIENT"), None),
+        "encounter_status": encounter.status if encounter else None,
         "ethnicity": patient.ethnicity, "marital_status": patient.marital_status,
         "birthplace": patient.birthplace, "occupation": patient.occupation,
         "admission_number": patient.admission_number, "bed": patient.bed_number, "diagnosis": patient.diagnosis,

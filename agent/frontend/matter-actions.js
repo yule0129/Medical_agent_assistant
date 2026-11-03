@@ -7,8 +7,8 @@ function matterActionHtml(a,item){
   const c=a.content,editable=a.status==='PROPOSED';
   const parentId=item.matter_id||item.id,owners=matterView?.data.owners||[];
   const current=matterView?.data.items.find(i=>i.id===parentId);
-  const status={PROPOSED:a.stale?'依据已过期，不可批准':'待医生批准',APPLIED:'医生已批准并执行',REJECTED:'医生未采纳',BLOCKED:'建议校验未通过'}[a.status];
-  return `<article class="admission-section" data-matter-action="${a.id}"><b>${html(actionLabels[c.action])}</b> <span class="tag ${a.status==='APPLIED'?'green':'orange'}">${html(status)}</span>
+  const status={PROPOSED:a.stale?'已过期':'待处理',APPLIED:'已采纳并执行',REJECTED:'未采纳',BLOCKED:'校验未通过'}[a.status];
+  return `<article class="admission-section" data-matter-action="${a.id}"><b>建议：${html(actionLabels[c.action])}</b> <span class="tag ${a.status==='APPLIED'?'green':'orange'}">建议状态：${html(status)}</span>
     <p>${html(c.title)}</p><p>建议原因：${html(c.rationale)}</p>
     ${a.evidence.map(e=>`<blockquote class="record-text">${html(e.label)} · ${html(e.quote)}</blockquote>`).join('')}
     <p>执行效果：${c.action==='CREATE_FOLLOWUP'?'批准后新增一条正式后续事项，关联原事项；原事项保持跟进中。':c.action==='RESCHEDULE'?'批准后更改原事项的计划时间。':c.action==='REVISE_PLAN'?'批准后更新原事项标题及医生指定的安排。':c.action==='COMPLETE_MATTER'?'批准后将原事项标记为已完成。':'批准后将原事项标记为已取消。'}</p>

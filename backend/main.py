@@ -44,6 +44,8 @@ class RecordOut(BaseModel):
     source_rounding_session_id: int | None = None
     patient_id: int
     encounter_number: str | None = None
+    encounter_status: str | None = None
+    admitted_at: str | None = None
     created_at: str
     signed_at: str | None = None
 
@@ -86,6 +88,8 @@ def to_record(record: MedicalRecord, db: Session) -> RecordOut:
         source_rounding_session_id=source_id,
         patient_id=record.patient_id,
         encounter_number=encounter.encounter_number if encounter else None,
+        encounter_status=encounter.status if encounter else None,
+        admitted_at=(encounter.admitted_at.replace(tzinfo=timezone.utc) if encounter.admitted_at.tzinfo is None else encounter.admitted_at).isoformat() if encounter else None,
         created_at=created_at.isoformat(),
         signed_at=record.signed_at.isoformat() if record.signed_at else None,
     )
@@ -126,7 +130,8 @@ def health() -> dict[str, str | bool]:
 
 @app.get("/api/medical-records", response_model=list[RecordOut])
 def list_records(status: Optional[str] = None, q: Optional[str] = None, patient_id: int | None = None, encounter_id: int | None = None, db: Session = Depends(get_db)):
-    query = select(MedicalRecord).order_by(MedicalRecord.created_at.desc(), MedicalRecord.id.desc())
+    query = select(MedicalRecord).outerjoin(Encounter, Encounter.id == MedicalRecord.encounter_id).order_by(
+        Encounter.admitted_at.desc().nullslast(), Encounter.id.desc(), MedicalRecord.created_at.desc(), MedicalRecord.id.desc())
     if patient_id is not None:
         query = query.where(MedicalRecord.patient_id == patient_id)
     if encounter_id is not None:
@@ -158,7 +163,9 @@ def patient_history(patient_id: int, encounter_id: int | None = None, doctor_id:
     accessible_ids = {row.id for row in accessible}
     if encounter_id is not None and encounter_id not in accessible_ids:
         raise HTTPException(404, "该患者的可访问住院记录不存在")
-    record_query = select(MedicalRecord).where(MedicalRecord.patient_id == patient_id).order_by(MedicalRecord.created_at.desc(), MedicalRecord.id.desc())
+    record_query = select(MedicalRecord).outerjoin(Encounter, Encounter.id == MedicalRecord.encounter_id).where(
+        MedicalRecord.patient_id == patient_id).order_by(
+        Encounter.admitted_at.desc().nullslast(), Encounter.id.desc(), MedicalRecord.created_at.desc(), MedicalRecord.id.desc())
     if encounter_id is not None:
         record_query = record_query.where(MedicalRecord.encounter_id == encounter_id)
     records = [row for row in db.scalars(record_query) if row.encounter_id in accessible_ids or (row.encounter_id is None and patient.doctor_id == doctor_id)]
@@ -167,6 +174,7 @@ def patient_history(patient_id: int, encounter_id: int | None = None, doctor_id:
     numbers = {row.id: row.encounter_number for row in accessible}
     return {
         "patient": {"id": patient.id, "name": patient.name, "bed": patient.bed_number, "diagnosis": patient.diagnosis},
+        "current_encounter_id": next((row.id for row in accessible if row.status == "INPATIENT"), None),
         "encounters": [{"id": row.id, "encounter_number": row.encounter_number, "admitted_at": row.admitted_at.isoformat(), "status": row.status} for row in accessible],
         "records": [{**to_record(row, db).model_dump(exclude={"content"}), "preview": row.content[:160]} for row in records],
         "roundings": [{**rounding_summary(db, row), "encounter_number": numbers[row.encounter_id]} for row in roundings],

@@ -89,4 +89,8 @@ def feedback(doctor_id:int=1,db:Session=Depends(get_db)):
         patient=db.get(Patient,row.patient_id)
         items.append({'matter_id':row.id,'matter_version':row.version,'patient_id':row.patient_id,
             'encounter_id':row.encounter_id,'patient':patient.name,'title':row.title,'progress':progress_out(db,row)})
-    return {'items':items,'attention_count':sum(bool(i['progress']['needs_attention']) for i in items)}
+    from agent.patient_memory.automatic import feedback as extraction_feedback
+    extractions=extraction_feedback(db,doctor_id)
+    return {'items':items,'extractions':extractions,
+        'candidate_count':sum(s['candidate_count'] for s in extractions if s['status']=='READY'),
+        'attention_count':sum(bool(i['progress']['needs_attention']) for i in items)}
