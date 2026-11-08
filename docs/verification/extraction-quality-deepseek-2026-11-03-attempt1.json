@@ -1,0 +1,417 @@
+{
+  "synthetic_only": true,
+  "policy_version": "extraction-quality-v1",
+  "cases": [
+    {
+      "case": "explicit",
+      "source": {
+        "kind": "ROUNDING",
+        "id": 1,
+        "version": 1,
+        "label": "完全合成质量案例",
+        "text": "医生：明天复查血常规。药物过敏史还需向女儿核实。请联系心内科会诊。",
+        "at": "2026-11-03T02:00:00+00:00"
+      },
+      "known": [],
+      "rows": [
+        {
+          "proposal": {
+            "kind": "RECHECK",
+            "title": "明天复查血常规",
+            "quote": "医生：明天复查血常规。",
+            "due_text": "明天",
+            "classification": "ACTIONABLE",
+            "action_text": "复查",
+            "target_text": "血常规",
+            "evidence_kind": "LAB_REPORT",
+            "clarification": ""
+          },
+          "quality": {
+            "policy_version": "extraction-quality-v1",
+            "admission": "KEEP",
+            "issues": [],
+            "action_text": "复查",
+            "target_text": "血常规",
+            "evidence_kind": "LAB_REPORT",
+            "review_reason": "医生明确下达明日复查血常规的未来可核对计划，动作、对象和时间清晰，来源支持。",
+            "classification": "ACTIONABLE",
+            "duplicate_ids": []
+          }
+        },
+        {
+          "proposal": {
+            "kind": "VERIFY_INFO",
+            "title": "向女儿核实药物过敏史",
+            "quote": "药物过敏史还需向女儿核实。",
+            "due_text": "",
+            "classification": "ACTIONABLE",
+            "action_text": "核实",
+            "target_text": "药物过敏史；女儿",
+            "evidence_kind": "VERIFICATION_RECORD",
+            "clarification": ""
+          },
+          "quality": {
+            "policy_version": "extraction-quality-v1",
+            "admission": "CLARIFY",
+            "issues": [
+              "动作或对象不在引用原文中，请核实并补充实际安排",
+              "标题与原文动作或对象不一致，请医生核对标题"
+            ],
+            "action_text": "核实",
+            "target_text": "药物过敏史；女儿",
+            "evidence_kind": "VERIFICATION_RECORD",
+            "review_reason": "原文明确提出向女儿核实药物过敏史这一待办核实事项，对象和动作具体，未擅自补充细节。",
+            "classification": "ACTIONABLE",
+            "duplicate_ids": []
+          }
+        },
+        {
+          "proposal": {
+            "kind": "CONTACT",
+            "title": "联系心内科会诊",
+            "quote": "请联系心内科会诊。",
+            "due_text": "",
+            "classification": "ACTIONABLE",
+            "action_text": "联系",
+            "target_text": "心内科会诊",
+            "evidence_kind": "CONTACT_RECORD",
+            "clarification": ""
+          },
+          "quality": {
+            "policy_version": "extraction-quality-v1",
+            "admission": "KEEP",
+            "issues": [],
+            "action_text": "联系",
+            "target_text": "心内科会诊",
+            "evidence_kind": "CONTACT_RECORD",
+            "review_reason": "原文明确提出联系心内科会诊，动作与对象清晰，属于可执行会诊联系事项。",
+            "classification": "ACTIONABLE",
+            "duplicate_ids": []
+          }
+        }
+      ],
+      "passed": false,
+      "model": "deepseek-flash"
+    },
+    {
+      "case": "vague",
+      "source": {
+        "kind": "ROUNDING",
+        "id": 1,
+        "version": 1,
+        "label": "完全合成质量案例",
+        "text": "医生：完善检查。另外复查炎症指标。",
+        "at": "2026-11-03T02:00:00+00:00"
+      },
+      "known": [],
+      "rows": [
+        {
+          "proposal": {
+            "kind": "OTHER",
+            "title": "完善检查",
+            "quote": "完善检查。",
+            "due_text": "",
+            "classification": "NEEDS_CLARIFICATION",
+            "action_text": "完善",
+            "target_text": "检查",
+            "evidence_kind": "UNSPECIFIED",
+            "clarification": "“完善检查”具体指哪些检查项目？"
+          },
+          "quality": {
+            "policy_version": "extraction-quality-v1",
+            "admission": "SKIP",
+            "issues": [
+              "“完善检查”具体指哪些检查项目？",
+              "请明确后续可核对的资料类型",
+              "对象过于笼统，请明确具体检查、信息或执行内容"
+            ],
+            "action_text": "完善",
+            "target_text": "检查",
+            "evidence_kind": "UNSPECIFIED",
+            "review_reason": "“完善检查”是模糊笼统的医疗嘱咐，未指出具体检查项目或对象，不能作为可直接执行的任务。",
+            "classification": "NEEDS_CLARIFICATION",
+            "duplicate_ids": []
+          }
+        },
+        {
+          "proposal": {
+            "kind": "RECHECK",
+            "title": "复查炎症指标",
+            "quote": "复查炎症指标。",
+            "due_text": "",
+            "classification": "NEEDS_CLARIFICATION",
+            "action_text": "复查",
+            "target_text": "炎症指标",
+            "evidence_kind": "LAB_REPORT",
+            "clarification": "“炎症指标”具体包括哪些检验项目？"
+          },
+          "quality": {
+            "policy_version": "extraction-quality-v1",
+            "admission": "CLARIFY",
+            "issues": [
+              "“炎症指标”具体包括哪些检验项目？",
+              "对象过于笼统，请明确具体检查、信息或执行内容"
+            ],
+            "action_text": "复查",
+            "target_text": "炎症指标",
+            "evidence_kind": "LAB_REPORT",
+            "review_reason": "“复查炎症指标”明确了复查动作和未来可核对资料类别，但“炎症指标”具体检验项目不清，证据种类需明确。",
+            "classification": "NEEDS_CLARIFICATION",
+            "duplicate_ids": []
+          }
+        }
+      ],
+      "passed": false,
+      "model": "deepseek-flash"
+    },
+    {
+      "case": "not_pending",
+      "source": {
+        "kind": "ROUNDING",
+        "id": 1,
+        "version": 1,
+        "label": "完全合成质量案例",
+        "text": "医生：血常规已经复查，结果已查看。暂不复查胸部CT。",
+        "at": "2026-11-03T02:00:00+00:00"
+      },
+      "known": [],
+      "rows": [
+        {
+          "proposal": {
+            "kind": "RECHECK",
+            "title": "复查血常规",
+            "quote": "血常规已经复查，结果已查看。",
+            "due_text": "",
+            "classification": "ALREADY_DONE",
+            "action_text": "复查",
+            "target_text": "血常规",
+            "evidence_kind": "LAB_REPORT",
+            "clarification": ""
+          },
+          "quality": {
+            "policy_version": "extraction-quality-v1",
+            "admission": "SKIP",
+            "issues": [],
+            "action_text": "复查",
+            "target_text": "血常规",
+            "evidence_kind": "LAB_REPORT",
+            "review_reason": "原文明确血常规已经复查且结果已查看，属于已完成事项，不是未来待执行计划。",
+            "classification": "ALREADY_DONE",
+            "duplicate_ids": []
+          }
+        },
+        {
+          "proposal": {
+            "kind": "RECHECK",
+            "title": "暂不复查胸部CT",
+            "quote": "暂不复查胸部CT。",
+            "due_text": "",
+            "classification": "NEGATED",
+            "action_text": "复查",
+            "target_text": "胸部CT",
+            "evidence_kind": "CLINICIAN_NOTE",
+            "clarification": ""
+          },
+          "quality": {
+            "policy_version": "extraction-quality-v1",
+            "admission": "SKIP",
+            "issues": [],
+            "action_text": "复查",
+            "target_text": "胸部CT",
+            "evidence_kind": "CLINICIAN_NOTE",
+            "review_reason": "原文明确暂不复查胸部CT，计划已被否定，不能作为待执行任务。",
+            "classification": "NEGATED",
+            "duplicate_ids": []
+          }
+        }
+      ],
+      "passed": true,
+      "model": "deepseek-flash"
+    },
+    {
+      "case": "patient_request",
+      "source": {
+        "kind": "ROUNDING",
+        "id": 1,
+        "version": 1,
+        "label": "完全合成质量案例",
+        "text": "患者：我想明天做胸部CT。医生：先评估，目前尚未安排。",
+        "at": "2026-11-03T02:00:00+00:00"
+      },
+      "known": [],
+      "rows": [
+        {
+          "proposal": {
+            "kind": "OTHER",
+            "title": "患者提出明日行胸部CT的诉求，医生未确认安排",
+            "quote": "患者：我想明天做胸部CT。医生：先评估，目前尚未安排。",
+            "due_text": "明天",
+            "classification": "PATIENT_REQUEST",
+            "action_text": "做",
+            "target_text": "胸部CT",
+            "evidence_kind": "UNSPECIFIED",
+            "clarification": "医生是否同意安排胸部CT？如同意，具体时间和前置评估要求是什么？"
+          },
+          "quality": {
+            "policy_version": "extraction-quality-v1",
+            "admission": "SKIP",
+            "issues": [
+              "医生是否同意安排胸部CT？如同意，具体时间和前置评估要求是什么？",
+              "请明确后续可核对的资料类型",
+              "标题与原文动作或对象不一致，请医生核对标题",
+              "该安排来自患者或家属表述，需医生明确确认"
+            ],
+            "action_text": "做",
+            "target_text": "胸部CT",
+            "evidence_kind": "UNSPECIFIED",
+            "review_reason": "仅为患者诉求，医生明确表示尚未安排，未形成待执行计划。",
+            "classification": "PATIENT_REQUEST",
+            "duplicate_ids": []
+          }
+        }
+      ],
+      "passed": true,
+      "model": "deepseek-flash"
+    },
+    {
+      "case": "conditional",
+      "source": {
+        "kind": "ROUNDING",
+        "id": 1,
+        "version": 1,
+        "label": "完全合成质量案例",
+        "text": "医生：如果明天仍发热，再复查C反应蛋白，目前尚未确定是否实施。",
+        "at": "2026-11-03T02:00:00+00:00"
+      },
+      "known": [],
+      "rows": [
+        {
+          "proposal": {
+            "kind": "RECHECK",
+            "title": "若明日仍发热则复查C反应蛋白",
+            "quote": "如果明天仍发热，再复查C反应蛋白，目前尚未确定是否实施。",
+            "due_text": "明天",
+            "classification": "CONDITIONAL",
+            "action_text": "复查",
+            "target_text": "C反应蛋白",
+            "evidence_kind": "LAB_REPORT",
+            "clarification": "需确认明日是否仍发热，以及是否实际执行复查"
+          },
+          "quality": {
+            "policy_version": "extraction-quality-v1",
+            "admission": "CLARIFY",
+            "issues": [
+              "需确认明日是否仍发热，以及是否实际执行复查"
+            ],
+            "action_text": "复查",
+            "target_text": "C反应蛋白",
+            "evidence_kind": "LAB_REPORT",
+            "review_reason": "原文明确条件为“如果明天仍发热”，且称尚未确定是否实施，属于未明确成立的条件性计划，不能作为可直接执行的医生待执行计划。",
+            "classification": "CONDITIONAL",
+            "duplicate_ids": []
+          }
+        }
+      ],
+      "passed": true,
+      "model": "deepseek-flash"
+    },
+    {
+      "case": "background",
+      "source": {
+        "kind": "ROUNDING",
+        "id": 1,
+        "version": 1,
+        "label": "完全合成质量案例",
+        "text": "医生：继续当前抗感染方案，住院规范抗感染治疗。",
+        "at": "2026-11-03T02:00:00+00:00"
+      },
+      "known": [],
+      "rows": [
+        {
+          "proposal": {
+            "kind": "OTHER",
+            "title": "继续当前抗感染方案并住院规范抗感染治疗",
+            "quote": "继续当前抗感染方案，住院规范抗感染治疗。",
+            "due_text": "",
+            "classification": "BACKGROUND",
+            "action_text": "继续",
+            "target_text": "当前抗感染方案",
+            "evidence_kind": "CLINICIAN_NOTE",
+            "clarification": ""
+          },
+          "quality": {
+            "policy_version": "extraction-quality-v1",
+            "admission": "SKIP",
+            "issues": [],
+            "action_text": "继续",
+            "target_text": "当前抗感染方案",
+            "evidence_kind": "CLINICIAN_NOTE",
+            "review_reason": "“继续抗感染方案/住院规范抗感染治疗”属于宽泛治疗方向，无法拆成明确可执行、可核对的医生待办任务。",
+            "classification": "BACKGROUND",
+            "duplicate_ids": []
+          }
+        }
+      ],
+      "passed": true,
+      "model": "deepseek-flash"
+    },
+    {
+      "case": "duplicate",
+      "source": {
+        "kind": "ROUNDING",
+        "id": 1,
+        "version": 1,
+        "label": "完全合成质量案例",
+        "text": "医生：明天复查肝功能。",
+        "at": "2026-11-03T02:00:00+00:00"
+      },
+      "known": [
+        {
+          "id": 7,
+          "title": "复查肝功能",
+          "kind": "RECHECK",
+          "status": "OPEN",
+          "quote": "明天复查肝功能。",
+          "quality": {
+            "action_text": "复查",
+            "target_text": "肝功能"
+          },
+          "source_at": "2026-11-03T01:00:00+00:00"
+        }
+      ],
+      "rows": [
+        {
+          "proposal": {
+            "kind": "RECHECK",
+            "title": "复查肝功能",
+            "quote": "医生：明天复查肝功能。",
+            "due_text": "明天",
+            "classification": "ACTIONABLE",
+            "action_text": "复查",
+            "target_text": "肝功能",
+            "evidence_kind": "LAB_REPORT",
+            "clarification": ""
+          },
+          "quality": {
+            "policy_version": "extraction-quality-v1",
+            "admission": "KEEP",
+            "issues": [],
+            "action_text": "复查",
+            "target_text": "肝功能",
+            "evidence_kind": "LAB_REPORT",
+            "review_reason": "医生明确计划明日复查肝功能，动作、对象和时限清楚；与现有事项7可能为同一安排，来源时间不同但内容一致。",
+            "classification": "ACTIONABLE",
+            "duplicate_ids": [
+              7
+            ]
+          }
+        }
+      ],
+      "passed": true,
+      "model": "deepseek-flash"
+    }
+  ],
+  "passed": 5,
+  "total": 7,
+  "limits": "Fixed synthetic cases only; not a clinical validation or diagnostic evaluation."
+}

@@ -50,9 +50,13 @@ def build_snapshot(db,matter,now=None):
         child=db.get(PatientMatter,link.child_id);action=db.get(MatterAction,link.action_id)
         children.append({'id':child.id,'status':child.status,'version':child.version,'title':child.title})
         if child.status=='OPEN':purposes.append(action.content.get('purpose'))
-    snapshot={'policy_version':'matter-actions-v1','matter':{'id':matter.id,'patient_id':matter.patient_id,'encounter_id':encounter.id,
+    from agent.patient_memory.workflow import completion_contract
+    snapshot={'policy_version':'matter-workflow-v2','matter':{'id':matter.id,'patient_id':matter.patient_id,'encounter_id':encounter.id,
         'parent_id':parent.parent_id if parent else None,'active_child_purposes':purposes,'children':children,'version':matter.version,'kind':matter.kind,'title':matter.title,'quote':matter.quote,
         'due_text':matter.due_text,'due_at':utc(matter.due_at).isoformat() if matter.due_at else None,
+        'completion_contract':completion_contract(matter),
+        'plan_started_at':(matter.quality or {}).get('plan_revision_at') or matter.source.get('at'),
+        'clarified_plan':{k:matter.quality.get(k) for k in ('action_text','target_text','evidence_kind','clarification_note','clarified_by')} if matter.quality else {},
         'assigned_doctor_id':matter.assigned_doctor_id,'original_source':{k:matter.source.get(k) for k in ('kind','id','label','digest','at','version')}},
         'past_due':bool(matter.due_at and utc(matter.due_at)<=now),
         'coverage':{'complete':not(clipped or len(notes)>30 or len(events)>20 or len(ordered)>30),

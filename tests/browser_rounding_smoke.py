@@ -523,6 +523,87 @@ def main():
             wait("matterView?.data.items.some(i=>i.source.kind==='ROUNDING'&&i.source.id==="+str(automatic_round_id)+"&&i.title==='向女儿核实药物过敏史')")
             assert js("matterView.data.items.filter(i=>i.source.kind==='ROUNDING'&&i.source.id==="+str(automatic_round_id)+").every(i=>i.status==='CANDIDATE')")
             print('PASS: rounding completion automatically queues extraction; worker persists candidates; patient-detail feedback links to clinician confirmation without manual scanning.')
+            # Quality clarification and duplicate linkage use the same patient detail UI.
+            from backend.models import RoundingSession
+            with Session(engine) as db:
+                db.add(Patient(id=3,name='合成质量患者',admission_number='QUALITY-3',bed_number='03床',diagnosis='测试',doctor_id=1))
+                db.flush();db.add(Encounter(id=4,encounter_number='QUALITY-ENC',patient_id=3,attending_doctor_id=1,admitted_at=datetime.now(timezone.utc)))
+                db.flush();row=RoundingSession(encounter_id=4,doctor_id=1,transcript='医生：完善检查。',started_at=datetime.now(timezone.utc),record_mode='TRANSCRIPT',status='COMPLETED')
+                db.add(row);db.commit();quality_source=row.id
+            class VagueQuality(TestMatterModel):
+                def extract(self,source,known):
+                    return {'items':[dict(kind='RECHECK',title='完善检查',quote='完善检查。',due_text='',classification='NEEDS_CLARIFICATION',action_text='完善',target_text='检查',evidence_kind='UNSPECIFIED',clarification='请明确检查项目')]}
+            matter_service.get_provider=lambda:VagueQuality()
+            js('loadBackendPatients()');js('openPatientMatters(3,4)')
+            wait("matterView?.encounterId===4 && !!document.getElementById('scanPatientMatters')")
+            js('scanPatientMatters()')
+            wait("!matterBusy&&matterView?.data.items.some(i=>i.quality.admission==='CLARIFY')")
+            quality_id=js("matterView.data.items.find(i=>i.quality.admission==='CLARIFY').id")
+            js(f"reviewPatientMatter({quality_id},'CONFIRM')")
+            assert js(f"document.getElementById('matterItemError-{quality_id}').textContent.includes('请补充')")
+            js(f"document.getElementById('qualityAction-{quality_id}').value='复查';document.getElementById('qualityTarget-{quality_id}').value='血常规';document.getElementById('qualityEvidence-{quality_id}').value='LAB_REPORT';document.getElementById('qualityNote-{quality_id}').value='医生已核实，具体安排为复查血常规';document.getElementById('matterTitle-{quality_id}').value='复查血常规';reviewPatientMatter({quality_id},'CONFIRM')")
+            wait(f"!matterBusy&&matterView.data.items.some(i=>i.id==={quality_id}&&i.status==='OPEN')")
+            with Session(engine) as db:
+                row=RoundingSession(encounter_id=4,doctor_id=1,transcript='医生：复查血常规。',started_at=datetime.now(timezone.utc),record_mode='TRANSCRIPT',status='COMPLETED')
+                db.add(row);db.commit();duplicate_source=row.id
+            class DuplicateQuality(TestMatterModel):
+                def extract(self,source,known):
+                    return {'items':[dict(kind='RECHECK',title='复查血常规',quote='复查血常规。',due_text='',classification='ACTIONABLE',action_text='复查',target_text='血常规',evidence_kind='LAB_REPORT')]}
+            matter_service.get_provider=lambda:DuplicateQuality()
+            js(f"(async()=>{{let d=await workflowFetch('/agent/encounters/4/matters');let s=d.sources.find(s=>s.id==={duplicate_source});await postWorkflow('/agent/encounters/4/matters/scan',{{doctor_id:1,source_kind:'ROUNDING',source_id:s.id,expected_digest:s.digest}});await openPatientMatters(3,4);}})()")
+            wait("matterView?.data.items.some(i=>i.status==='CANDIDATE'&&i.quality.duplicates.length)")
+            duplicate_id=js("matterView.data.items.find(i=>i.status==='CANDIDATE').id")
+            js(f"reviewPatientMatter({duplicate_id},'CONFIRM')")
+            assert js(f"document.getElementById('matterItemError-{duplicate_id}').textContent.includes('重复处理')")
+            js(f"document.getElementById('qualityDuplicateDecision-{duplicate_id}').value='LINK';document.getElementById('qualityDuplicateTarget-{duplicate_id}').value='{quality_id}';document.getElementById('matterNote-{duplicate_id}').value='核对为同一次复查，关联已有安排';reviewPatientMatter({duplicate_id},'CONFIRM')")
+            wait(f"!matterBusy&&matterView.data.items.some(i=>i.id==={duplicate_id}&&i.quality.linked_matter_id==={quality_id})")
+            assert js("(async()=> (await workflowFetch('/agent/matter-tasks')).filter(t=>t.encounter_id===4).length===1)()")
+            assert js(f"matterView.data.items.find(i=>i.id==={quality_id}).status==='OPEN'")
+            print('PASS: vague plan blocked until physician supplementation; duplicate decision required; linkage creates no second task and preserves original OPEN matter.')
+            assert js("document.getElementById('matterWorkSummary').textContent.includes('本次住院工作摘要')")
+            js(f"loadMatterTimeline({quality_id})")
+            wait(f"document.getElementById('matterTimeline-{quality_id}')?.textContent.includes('后续记录已关联')")
+            js(f"document.getElementById('matterFeedbackNote-{quality_id}').value='需要保留具体项目与本次查房时间';saveMatterQualityFeedback({quality_id})")
+            wait(f"document.getElementById('matterFeedbackStatus-{quality_id}')?.textContent.includes('反馈已留档')")
+            js('openPatientMatters(3,4)')
+            wait("document.getElementById('patientMatterView')?.textContent.includes('需要保留具体项目与本次查房时间')")
+            with Session(engine) as db:
+                now=datetime.now(timezone.utc)
+                event=ClinicalEvent(event_key='workflow-quality-lab',event_type='LAB_RESULT_CREATED',patient_id=3,encounter_id=4,occurred_at=now,received_at=now,source='synthetic',payload={})
+                db.add(event);db.flush()
+                db.add(LabReport(event_id=event.id,patient_id=3,encounter_id=4,report_id='QUALITY-CBC',report_version=1,test_name='血常规',result_text='本次查房后的合成检验结果',reported_at=now));db.commit()
+            for _ in range(30):
+                with Session(engine,autoflush=False) as db:
+                    progress_runtime.schedule(db);result=progress_runtime.process_once(db,ProgressTestModel())
+                if result is None:break
+            js('refreshMatterProgress()')
+            wait(f"document.getElementById('matterReviewedResult-{quality_id}')!==null")
+            assert js("document.getElementById('matterWorkSummary').textContent.includes('审阅相关报告')")
+            js(f"openMatterEvidence({quality_id},0)")
+            wait("document.getElementById('matterOriginalSource')?.textContent.includes('合成检验结果')")
+            js("document.getElementById('backToMatterSource').click()")
+            wait(f"document.getElementById('matterCompletionNote-{quality_id}')!==null")
+            js(f"openMatterCompletion({quality_id});document.getElementById('matterCompletionNote-{quality_id}').value='医生审阅本次报告并记录处理结论';reviewPatientMatter({quality_id},'COMPLETE')")
+            wait(f"!matterBusy&&document.getElementById('matterCompletionError-{quality_id}')?.textContent.includes('先审阅')")
+            old_result=js(f"Number(document.getElementById('matterReviewedResult-{quality_id}').dataset.resultId)")
+            js(f"document.getElementById('matterReviewedResult-{quality_id}').checked=true")
+            with Session(engine) as db:
+                now=datetime.now(timezone.utc)
+                event=ClinicalEvent(event_key='workflow-quality-lab-v2',event_type='LAB_RESULT_REVISED',patient_id=3,encounter_id=4,occurred_at=now,received_at=now,source='synthetic',payload={})
+                db.add(event);db.flush()
+                db.add(LabReport(event_id=event.id,patient_id=3,encounter_id=4,report_id='QUALITY-CBC',report_version=2,test_name='血常规',result_text='本次合成报告修订版本',reported_at=now));db.commit()
+            for _ in range(30):
+                with Session(engine,autoflush=False) as db:
+                    progress_runtime.schedule(db);result=progress_runtime.process_once(db,ProgressTestModel())
+                if result is None:break
+            js('refreshMatterProgress()')
+            wait(f"Number(document.getElementById('matterReviewedResult-{quality_id}')?.dataset.resultId)!=={old_result}")
+            assert js(f"!document.getElementById('matterReviewedResult-{quality_id}').checked && document.getElementById('matterCompletionNote-{quality_id}').value.includes('记录处理结论')")
+            js(f"document.getElementById('matterReviewedResult-{quality_id}').checked=true;reviewPatientMatter({quality_id},'COMPLETE')")
+            wait(f"!matterBusy&&matterView.data.items.some(i=>i.id==={quality_id}&&i.status==='COMPLETED')")
+            assert js(f"!Object.values(matterView.data.work_summary.groups).flat().some(i=>i.id==={quality_id})")
+            print('PASS: patient work summary auto refresh; longitudinal linked timeline; persisted quality feedback; report evidence source jump; explicit review and conclusion required for completion.')
+
             assert not errors, errors
             print('PASS: patient-name opens persisted basic information first; independent history/rounding tabs and admission selection; doctor feedback inbox, automatic result updates, unsaved input preservation, review count clearing; injected test-model Agent panel, real read tools, evidence candidate review, persisted traces, handoff confirmation and reload. No online model verification.')
             print('PASS: prior rounding/history regression; report event auto recovery; independent finding review; version-specific acknowledgement; physician resolution; dependent sensitivity task and second event recovery; persisted trace and reload; incoming report text never executes.')

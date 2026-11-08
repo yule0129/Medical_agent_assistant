@@ -49,7 +49,7 @@ def schedule(db):
 def eligible(scan,now):
     return (scan.status=='QUEUED' or
         scan.status=='FAILED' and scan.attempt<3 and scan.retry_at and utc(scan.retry_at)<=now or
-        scan.status=='RUNNING' and utc(scan.created_at)+timedelta(seconds=120)<=now)
+        scan.status=='RUNNING' and utc(scan.created_at)+timedelta(seconds=service.EXTRACTION_LEASE_SECONDS)<=now)
 
 
 def process_once(db):
@@ -98,8 +98,8 @@ def feedback(db,doctor_id):
         seen.add(source_key)
         try:stale=service.current_source(db,encounter,scan.source_kind,scan.source_id)['digest']!=scan.source_digest
         except HTTPException:stale=True
-        candidates=db.scalar(select(func.count()).select_from(PatientMatter).where(
-            PatientMatter.scan_id==scan.id,PatientMatter.status=='CANDIDATE'))
+        candidates=sum((r.quality or {}).get('admission')!='SKIP' for r in db.scalars(select(PatientMatter).where(
+            PatientMatter.scan_id==scan.id,PatientMatter.status=='CANDIDATE')))
         total=db.scalar(select(func.count()).select_from(PatientMatter).where(PatientMatter.scan_id==scan.id))
         result.append({'scan_id':scan.id,'patient_id':encounter.patient_id,'encounter_id':encounter.id,
             'patient':db.get(Patient,encounter.patient_id).name,'source_kind':scan.source_kind,'source_id':scan.source_id,

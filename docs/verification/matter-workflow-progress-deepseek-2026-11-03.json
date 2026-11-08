@@ -1,0 +1,271 @@
+{
+  "synthetic_only": true,
+  "model": "deepseek-flash",
+  "cases": [
+    {
+      "scenario": "response",
+      "snapshot": {
+        "matter": {
+          "id": 1,
+          "kind": "VERIFY_INFO",
+          "title": "向女儿核实药物过敏史",
+          "quote": "药物过敏史还需向女儿核实。",
+          "due_at": null,
+          "original_source": {
+            "at": "2026-10-31T01:00:00+00:00"
+          },
+          "completion_contract": {
+            "evidence_kind": "VERIFICATION_RECORD",
+            "target": "向女儿核实药物过敏史",
+            "required": "核实对象、信息来源及核实结论",
+            "doctor_confirmation_required": true
+          }
+        },
+        "past_due": false,
+        "coverage": {
+          "complete": true,
+          "scope": "仅合成资料"
+        },
+        "sources": [
+          {
+            "id": "origin",
+            "kind": "NOTE",
+            "label": "合成原计划",
+            "text": "药物过敏史还需向女儿核实。",
+            "is_origin": true,
+            "at": "2026-10-31T02:00:00+00:00"
+          },
+          {
+            "id": "note-new",
+            "kind": "NOTE",
+            "label": "合成查房2",
+            "text": "医生：已向女儿核实，患者既往服用阿莫西林后出现皮疹，已补充过敏史。",
+            "is_origin": false,
+            "at": "2026-10-31T02:00:00+00:00"
+          }
+        ]
+      },
+      "observation": {
+        "state": "RESPONSE_RECORDED",
+        "summary": "本次已读取的合成查房2记录明确记载医生已向女儿核实药物过敏史，并补充了阿莫西林服用后皮疹的过敏史，符合原事项的核实要求；事项是否正式完成需医生核对执行依据后决定。",
+        "references": [
+          {
+            "source_id": "note-new",
+            "quote": "医生：已向女儿核实，患者既往服用阿莫西林后出现皮疹，已补充过敏史。"
+          }
+        ],
+        "actions": [
+          {
+            "action": "COMPLETE_MATTER",
+            "purpose": null,
+            "title": "核对核实记录后决定完成“向女儿核实药物过敏史”",
+            "rationale": "合成查房2明确记载已向女儿核实并补充过敏史，符合该事项完成条件；仅作为候选，需医生核对执行依据后批准方生效。",
+            "source_ids": [
+              "note-new"
+            ],
+            "due_text": ""
+          },
+          {
+            "action": "CREATE_FOLLOWUP",
+            "purpose": "RECORD_RESPONSE",
+            "title": "补充过敏史核实处理记录（候选）",
+            "rationale": "查房记录已记载核实内容，但如需在现有事项中补充正式处理记录，可由医生决定是否创建补充记录任务；不涉及新医嘱或检查。",
+            "source_ids": [
+              "note-new"
+            ],
+            "due_text": ""
+          }
+        ]
+      }
+    },
+    {
+      "scenario": "result",
+      "snapshot": {
+        "matter": {
+          "id": 1,
+          "kind": "RECHECK",
+          "title": "复查血常规",
+          "quote": "明天复查血常规。",
+          "due_at": null,
+          "original_source": {
+            "at": "2026-10-31T01:00:00+00:00"
+          },
+          "completion_contract": {
+            "evidence_kind": "LAB_REPORT",
+            "target": "复查血常规",
+            "required": "对应本次安排的检查报告、医生审阅及处理结论",
+            "doctor_confirmation_required": true
+          }
+        },
+        "past_due": false,
+        "coverage": {
+          "complete": true,
+          "scope": "仅合成资料"
+        },
+        "sources": [
+          {
+            "id": "origin",
+            "kind": "NOTE",
+            "label": "合成原计划",
+            "text": "明天复查血常规。",
+            "is_origin": true,
+            "at": "2026-10-31T02:00:00+00:00"
+          },
+          {
+            "id": "lab-v2",
+            "kind": "LAB",
+            "label": "血常规",
+            "text": "【合成检查】白细胞计数12.0×10^9/L。",
+            "version": 2,
+            "is_origin": false,
+            "at": "2026-10-31T02:00:00+00:00"
+          }
+        ]
+      },
+      "observation": {
+        "state": "RESULT_AVAILABLE",
+        "summary": "本次已读取资料显示，原计划为“明天复查血常规”；现有来源lab-v2为血常规检验报告，记载“白细胞计数12.0×10^9/L”，可作为与当前事项明确对应的结果返回。该报告尚需医生查看并记录处理结论，不能视为事项已完成。",
+        "references": [
+          {
+            "source_id": "origin",
+            "quote": "明天复查血常规。"
+          },
+          {
+            "source_id": "lab-v2",
+            "quote": "【合成检查】白细胞计数12.0×10^9/L。"
+          }
+        ],
+        "actions": [
+          {
+            "action": "CREATE_FOLLOWUP",
+            "purpose": "REVIEW_RESULT",
+            "title": "提醒医生查看复查血常规结果并记录处理",
+            "rationale": "已返回与“复查血常规”对应的血常规检验报告（lab-v2），但尚无医生审阅及处理结论记录；建议创建提醒供医生查看现有结果并记录处理，是否完成事项由医生批准后决定。",
+            "source_ids": [
+              "lab-v2",
+              "origin"
+            ],
+            "due_text": ""
+          }
+        ]
+      }
+    },
+    {
+      "scenario": "changed",
+      "snapshot": {
+        "matter": {
+          "id": 1,
+          "kind": "CONTACT",
+          "title": "联系心内科会诊",
+          "quote": "请今天联系心内科会诊。",
+          "due_at": null,
+          "original_source": {
+            "at": "2026-10-31T01:00:00+00:00"
+          },
+          "completion_contract": {
+            "evidence_kind": "CONTACT_RECORD",
+            "target": "联系心内科会诊",
+            "required": "联系对象、回应结果及必要的后续安排",
+            "doctor_confirmation_required": true
+          }
+        },
+        "past_due": false,
+        "coverage": {
+          "complete": true,
+          "scope": "仅合成资料"
+        },
+        "sources": [
+          {
+            "id": "origin",
+            "kind": "NOTE",
+            "label": "合成原计划",
+            "text": "请今天联系心内科会诊。",
+            "is_origin": true,
+            "at": "2026-10-31T02:00:00+00:00"
+          },
+          {
+            "id": "note-change",
+            "kind": "NOTE",
+            "label": "合成查房2",
+            "text": "医生：原计划改为明天下午联系心内科会诊，今天暂不联系。",
+            "is_origin": false,
+            "at": "2026-10-31T02:00:00+00:00"
+          }
+        ]
+      },
+      "observation": {
+        "state": "PLAN_CHANGED",
+        "summary": "本次已读取资料显示，原计划为“请今天联系心内科会诊”，查房记录明确改为“明天下午联系心内科会诊，今天暂不联系”。当前事项应视为计划时间调整，尚未见实际联系记录；是否改期及完成仍由医生决定。",
+        "references": [
+          {
+            "source_id": "origin",
+            "quote": "请今天联系心内科会诊。"
+          },
+          {
+            "source_id": "note-change",
+            "quote": "医生：原计划改为明天下午联系心内科会诊，今天暂不联系。"
+          }
+        ],
+        "actions": [
+          {
+            "action": "REVISE_PLAN",
+            "purpose": null,
+            "title": "按查房记录调整联系心内科会诊时间",
+            "rationale": "查房记录明确将原计划改为明天下午联系心内科会诊、今天暂不联系，属于医生新记录中的明确时间调整。建议医生批准后按新时间更新安排，具体时间与负责人由医生批准时确认。",
+            "source_ids": [
+              "note-change"
+            ],
+            "due_text": "明天下午"
+          }
+        ]
+      }
+    },
+    {
+      "scenario": "waiting",
+      "snapshot": {
+        "matter": {
+          "id": 1,
+          "kind": "RECHECK",
+          "title": "复查血常规",
+          "quote": "明天复查血常规。",
+          "due_at": null,
+          "original_source": {
+            "at": "2026-10-31T01:00:00+00:00"
+          },
+          "completion_contract": {
+            "evidence_kind": "LAB_REPORT",
+            "target": "复查血常规",
+            "required": "对应本次安排的检查报告、医生审阅及处理结论",
+            "doctor_confirmation_required": true
+          }
+        },
+        "past_due": false,
+        "coverage": {
+          "complete": true,
+          "scope": "仅合成资料"
+        },
+        "sources": [
+          {
+            "id": "origin",
+            "kind": "NOTE",
+            "label": "合成原计划",
+            "text": "明天复查血常规。",
+            "is_origin": true,
+            "at": "2026-10-31T02:00:00+00:00"
+          }
+        ]
+      },
+      "observation": {
+        "state": "WAITING",
+        "summary": "本次仅读取到合成原计划记录「明天复查血常规。」（is_origin=true），该记录仅为原安排，不能作为已执行证据。本次已读取资料中未见复查血常规对应的检验报告、执行记录或医生审阅处理记录，故事项状态为WAITING；原计划到期时间未提供（due_at为null，past_due为false），暂不提出改期建议。",
+        "references": [
+          {
+            "source_id": "origin",
+            "quote": "明天复查血常规。"
+          }
+        ],
+        "actions": []
+      }
+    }
+  ]
+}

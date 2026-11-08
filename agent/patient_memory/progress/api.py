@@ -5,6 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 from backend.db import get_db
 from backend.models import Patient,AuditLog
+from backend.services.report_service import utc
 from agent.patient_memory.models import PatientMatter
 from agent.patient_memory.api import scope
 from .models import MatterProgressJob,MatterProgress
@@ -87,10 +88,13 @@ def feedback(doctor_id:int=1,db:Session=Depends(get_db)):
         try:scope(db,row.encounter_id,doctor_id)
         except HTTPException:continue
         patient=db.get(Patient,row.patient_id)
-        items.append({'matter_id':row.id,'matter_version':row.version,'patient_id':row.patient_id,
-            'encounter_id':row.encounter_id,'patient':patient.name,'title':row.title,'progress':progress_out(db,row)})
+        items.append({'id':row.id,'matter_id':row.id,'matter_version':row.version,'patient_id':row.patient_id,
+            'encounter_id':row.encounter_id,'patient':patient.name,'title':row.title,'status':row.status,
+            'source':{k:row.source.get(k) for k in ('kind','id','label','at')},'due_at':utc(row.due_at).isoformat() if row.due_at else None,'progress':progress_out(db,row)})
     from agent.patient_memory.automatic import feedback as extraction_feedback
     extractions=extraction_feedback(db,doctor_id)
-    return {'items':items,'extractions':extractions,
+    from agent.patient_memory.workflow import work_summary
+    summaries={str(encounter_id):work_summary([i for i in items if i['encounter_id']==encounter_id]) for encounter_id in {i['encounter_id'] for i in items}}
+    return {'items':items,'extractions':extractions,'summaries':summaries,
         'candidate_count':sum(s['candidate_count'] for s in extractions if s['status']=='READY'),
         'attention_count':sum(bool(i['progress']['needs_attention']) for i in items)}

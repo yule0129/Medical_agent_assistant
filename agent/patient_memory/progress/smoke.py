@@ -1,5 +1,7 @@
 """Online layer-two check with fixed synthetic sources only, no development DB access."""
-import json
+import argparse,json
+from types import SimpleNamespace
+from agent.patient_memory.workflow import completion_contract
 from pathlib import Path
 from backend.config import settings
 from .provider import get_provider
@@ -7,6 +9,9 @@ from .runtime import validate
 
 
 def main():
+    parser=argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--output',type=Path,default=Path('docs/verification/matter-progress-deepseek-2026-10-31.json'))
+    args=parser.parse_args()
     provider=get_provider();results=[]
     cases=[
         ('response','VERIFY_INFO','向女儿核实药物过敏史','药物过敏史还需向女儿核实。',
@@ -21,12 +26,13 @@ def main():
         snapshot={'matter':{'id':1,'kind':kind,'title':title,'quote':quote,'due_at':None,'original_source':{'at':'2026-10-31T01:00:00+00:00'}},
             'past_due':False,'coverage':{'complete':True,'scope':'仅合成资料'},
             'sources':[{'id':'origin','kind':'NOTE','label':'合成原计划','text':quote,'is_origin':True}]+sources}
+        snapshot['matter']['completion_contract']=completion_contract(SimpleNamespace(kind=kind,title=title,quality={}))
         for source in snapshot['sources']:source.setdefault('at','2026-10-31T02:00:00+00:00')
         observation=provider.observe(snapshot);validate(snapshot,observation)
         assert observation.state==expected,(name,observation.state)
         results.append({'scenario':name,'snapshot':snapshot,'observation':observation.model_dump()})
         print('PASS:',name,observation.state,flush=True)
-    path=Path('docs/verification/matter-progress-deepseek-2026-10-31.json')
+    path=args.output
     path.write_text(json.dumps({'synthetic_only':True,'model':provider.model,'cases':results},ensure_ascii=False,indent=2),encoding='utf-8')
     print('Synthetic-only artifact:',path)
 

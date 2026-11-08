@@ -6,7 +6,7 @@ from test_rounding_workflow import client
 from backend.models import AdmissionWorkspace, RoundingSession
 from agent.patient_memory import service
 from agent.patient_memory.models import PatientMatter, MatterScan
-from agent.patient_memory.contracts import Extraction
+from agent.patient_memory.contracts import Extraction,ExtractionReview
 from agent.admission.contracts import DraftError
 
 TEXT='医生：药物过敏史还需向女儿核实。明天复查血常规。请联系心内科会诊。'
@@ -19,9 +19,12 @@ class TestMatterModel:
     def extract(self,source,known):
         self.calls+=1
         return Extraction(items=[
-            dict(kind='VERIFY_INFO',title='向女儿核实药物过敏史',quote='药物过敏史还需向女儿核实。',due_text=''),
-            dict(kind='RECHECK',title='复查血常规',quote='明天复查血常规。',due_text='明天'),
-            dict(kind='CONTACT',title='联系心内科会诊',quote='请联系心内科会诊。',due_text='')])
+            dict(kind='VERIFY_INFO',title='向女儿核实药物过敏史',quote='药物过敏史还需向女儿核实。',due_text='',classification='ACTIONABLE',action_text='核实',target_text='药物过敏史',evidence_kind='VERIFICATION_RECORD'),
+            dict(kind='RECHECK',title='复查血常规',quote='明天复查血常规。',due_text='明天',classification='ACTIONABLE',action_text='复查',target_text='血常规',evidence_kind='LAB_REPORT'),
+            dict(kind='CONTACT',title='联系心内科会诊',quote='请联系心内科会诊。',due_text='',classification='ACTIONABLE',action_text='联系',target_text='心内科',evidence_kind='CONTACT_RECORD')])
+
+    def review(self,source,proposals,known):
+        return ExtractionReview(assessments=[dict(index=i,decision='KEEP',reason='合成明确计划') for i in range(len(proposals))])
 
 
 @pytest.fixture
@@ -111,7 +114,7 @@ def test_ungrounded_proposal_and_model_failure_do_not_create_tasks(client,model,
     http,engine=client;add_source(engine);source=list_data(http)['sources'][0]
     class Bad:
         model='test'
-        def extract(self,*_):return Extraction(items=[dict(kind='RECHECK',title='编造检查',quote='并不存在的医嘱',due_text='')])
+        def extract(self,*_):return Extraction(items=[dict(kind='RECHECK',title='编造检查',quote='并不存在的医嘱',due_text='',classification='ACTIONABLE',action_text='检查',target_text='编造',evidence_kind='LAB_REPORT')])
     monkeypatch.setattr(service,'get_provider',lambda:Bad())
     assert scan(http,source).status_code==502
     data=list_data(http)

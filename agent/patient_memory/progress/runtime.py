@@ -57,15 +57,20 @@ def validate(snapshot,observation):
     if observation.state in {'PLAN_CHANGED','CONFLICT'} and not any(not e['is_origin'] for e in evidence):
         raise DraftError('NEW_EVIDENCE_REQUIRED')
     if observation.state=='RESULT_AVAILABLE':
-        plan=snapshot['matter'];start=plan.get('original_source',{}).get('at')
+        plan=snapshot['matter'];start=plan.get('plan_started_at') or plan.get('original_source',{}).get('at')
         compact=lambda value:re.sub(r'[\W_]+','',value).replace('检查','')
-        target=compact(plan['title']+plan['quote'])
+        target=compact(plan.get('clarified_plan',{}).get('target_text') or plan['title'])
         eligible=[s for s in snapshot['sources'] if s['kind']=='LAB' and not s['is_origin'] and compact(s['label']) and compact(s['label']) in target
                   and start and datetime.fromisoformat(s['at'])>=datetime.fromisoformat(start)]
         cited=[e for e in evidence if e['kind']=='LAB']
         if plan['kind'] not in {'RECHECK','OTHER'} or len(eligible)!=1 or not all(e['id']==eligible[0]['id'] for e in cited):
             observation.state='UNCLEAR'
             observation.summary='发现检验资料，但无法按明确检查名称、时间及唯一来源对应原计划，请医生核对。'
+    if observation.state in {'RESPONSE_RECORDED','PLAN_CHANGED','CONFLICT'}:
+        plan=snapshot.get('matter',{})
+        start=plan.get('plan_started_at') or plan.get('original_source',{}).get('at')
+        if start and not any(not e['is_origin'] and datetime.fromisoformat(e['at'])>=datetime.fromisoformat(start) for e in evidence):
+            raise DraftError('PROGRESS_PREDATES_PLAN')
     if observation.state=='WAITING' and not snapshot['coverage']['complete']:
         raise DraftError('INCOMPLETE_COVERAGE_REQUIRES_UNCLEAR')
     return evidence

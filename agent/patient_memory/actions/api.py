@@ -91,6 +91,8 @@ def review_action(action_id:int,payload:ReviewAction,db:Session=Depends(get_db))
             matter.due_at,matter.assigned_doctor_id=due,owner
             effect={'due_at':due.isoformat(),'assigned_doctor_id':owner}
         elif content['action']=='REVISE_PLAN':
+            from agent.patient_memory.workflow import revise_plan_metadata
+            revise_plan_metadata(matter,title,payload.note.strip())
             matter.title,matter.assigned_doctor_id=title,owner
             if due is not None:matter.due_at=due
             effect={'title':title,'assigned_doctor_id':owner}

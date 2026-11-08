@@ -1,6 +1,19 @@
 let matterView=null,matterBusy=false,matterRequest=0;
 const matterKinds={VERIFY_INFO:'待核实信息',RECHECK:'复查计划',CONTACT:'联系／安排',OTHER:'其他待办'};
 const matterStates={CANDIDATE:'待确认',OPEN:'进行中',COMPLETED:'已完成',DISMISSED:'已忽略',CANCELLED:'已取消'};
+const matterEvidenceKinds={LAB_REPORT:'相关检查报告',VERIFICATION_RECORD:'核实结果记录',CONTACT_RECORD:'联系／会诊回应记录',CLINICIAN_NOTE:'实际执行记录'};
+function matterQualityEditor(i){
+  const q=i.quality||{},candidate=i.status==='CANDIDATE';
+  if(!candidate)return q.clarification_note?`<p>医生补充安排：${html(q.clarification_note)}</p>`:'';
+  return `${q.admission==='CLARIFY'?`<fieldset class="matter-quality"><legend>补充明确的安排</legend><p class="section-note">${html((q.issues||[]).join('；')||q.review_reason||'请补充实际安排')}。以下内容代表医生补充的安排，不覆盖问诊原文。</p>
+    <label>执行动作 <input id="qualityAction-${i.id}" value="${html(q.action_text||'')}" placeholder="例如：复查、核实、联系" /></label>
+    <label>具体对象 <input id="qualityTarget-${i.id}" value="${html(q.target_text||'')}" placeholder="填写实际检查项目、信息或联系对象" /></label>
+    <p><label>后续核对资料 <select id="qualityEvidence-${i.id}"><option value="">请选择</option>${Object.entries(matterEvidenceKinds).map(([key,label])=>`<option value="${key}" ${q.evidence_kind===key?'selected':''}>${label}</option>`).join('')}</select></label></p>
+    <label>实际安排说明（必填）<textarea id="qualityNote-${i.id}" placeholder="注明核实后确定的具体安排，并同步修改上方事项标题。"></textarea></label></fieldset>`:''}
+    ${q.duplicates?.length?`<fieldset class="matter-quality"><legend>核对可能重复的安排</legend><p>${q.duplicates.map(d=>`${html(d.title)}（${html(matterStates[d.status])}，${html(localTime(d.source_at))}）`).join('；')}</p>
+    <label>处理方式 <select id="qualityDuplicateDecision-${i.id}"><option value="">请先核对</option><option value="LINK">关联已有事项，不新建待办</option><option value="SEPARATE">这是另一项安排，单独跟进</option></select></label>
+    <label>关联对象 <select id="qualityDuplicateTarget-${i.id}">${q.duplicates.map(d=>`<option value="${d.id}">${html(d.title)} · ${html(matterStates[d.status])}</option>`).join('')}</select></label><p class="section-note">请在下方备注填写核对理由。关联只处理此候选，不改变原事项。</p></fieldset>`:''}`;
+}
 function matterGroups(items,owners){
   const groups=[['待确认','核对Agent提取的事项，确认后进入正式待办。',i=>i.status==='CANDIDATE'],
     ['进行中','已进入正式待办；Agent建议在各事项的进展详情中单独处理。',i=>i.status==='OPEN'],
@@ -42,16 +55,16 @@ async function openPatientMatters(patientId,encounterId=null,filter='active',sou
     box.insertAdjacentHTML('beforebegin',patientTabs(patientId,'matters',p.encounter_id));
     const items=data.items.filter(i=>filter==='all'||(filter==='active'?['CANDIDATE','OPEN'].includes(i.status):['COMPLETED','DISMISSED','CANCELLED'].includes(i.status)));
     box.innerHTML=`<label>住院 <select id="matterEncounter" onchange="openPatientMatters(${patientId},Number(this.value))">${p.encounters.map(e=>`<option value="${e.id}" ${e.id===p.encounter_id?'selected':''}>${html(e.encounter_number)}</option>`).join('')}</select></label>
-      <p class="matter-flow">待确认 ${data.items.filter(i=>i.status==='CANDIDATE').length} <span>→</span> 进行中 ${data.items.filter(i=>i.status==='OPEN').length} <span>→</span> 已结束 ${data.items.filter(i=>!['CANDIDATE','OPEN'].includes(i.status)).length}</p>
+      ${matterWorkSummary(data.work_summary)}<p class="matter-flow">待确认 ${data.items.filter(i=>i.status==='CANDIDATE').length} <span>→</span> 进行中 ${data.items.filter(i=>i.status==='OPEN').length} <span>→</span> 已结束 ${data.items.filter(i=>!['CANDIDATE','OPEN'].includes(i.status)).length}</p>
       <label>显示范围 <select id="matterFilter" onchange="openPatientMatters(${patientId},${p.encounter_id},this.value)"><option value="active">待确认与进行中</option><option value="done">已结束／已忽略</option><option value="all">全部事项</option></select></label>
-      <div id="patientMatterCards">${matterGroups(items,data.owners)}</div><p id="matterError" role="alert" style="color:#b42318"></p><details class="matter-tools"><summary>自动提取状态与重试</summary>      <section><h3>自动提取状态</h3><div data-extraction-encounter="${p.encounter_id}">正在读取…</div></section>
+      <div id="patientMatterCards">${matterGroups(items,data.owners)}</div><p id="matterError" role="alert" style="color:#b42318"></p>${matterFeedbackSummary(data.quality_feedback)}<details class="matter-tools"><summary>自动提取状态与重试</summary>      <section><h3>自动提取状态</h3><div data-extraction-encounter="${p.encounter_id}">正在读取…</div></section>
       <section class="admission-section"><h3>手动重新识别／失败重试</h3>
       <select id="matterSource">${data.sources.map(s=>`<option value="${s.kind}:${s.id}">${html(s.label)} · ${html(localTime(s.at))}</option>`).join('')}</select>
       <button class="primary" id="scanPatientMatters" ${!data.sources.length||!data.model_configured?'disabled':''} onclick="scanPatientMatters()">Agent识别问题与计划</button>
       <p class="section-note">保存入院问诊、完成查房后会自动提取候选，无需点击识别。此按钮用于手动识别或失败重试。候选由医生确认后进入待办并自动跟进，不生成查房总结。</p>
       ${!data.model_configured?'<p>模型尚未配置；已有事项仍可查看和处理。</p>':''}
       <p id="matterScanStatus" role="status"></p>
-      ${data.scans.slice(0,3).map(s=>`<p class="section-note">识别 #${s.id} · ${html(s.status)} ${html(s.error_code||'')}</p>`).join('')}</section>
+      ${data.scans.slice(0,3).map(s=>`<p class="section-note">识别 #${s.id} · ${html(s.status)} ${html(s.error_code||'')}</p>${s.quality_report?.items?.length?`<details><summary>提取质量核对记录 · 排除 ${s.quality_report.skipped_count||0} 项</summary>${s.quality_report.items.map(r=>`<p>${html(r.proposal.title)}：${r.quality.admission==='SKIP'?'未纳入':r.quality.admission==='CLARIFY'?'需补充':'可核对确认'} · ${html(r.quality.review_reason)}</p>`).join('')}</details>`:''}`).join('')}</section>
 </details>`;
     document.getElementById('matterFilter').value=filter;
     if(sourceKey&&data.sources.some(s=>s.kind+':'+s.id===sourceKey))document.getElementById('matterSource').value=sourceKey;
@@ -61,30 +74,40 @@ async function openPatientMatters(patientId,encounterId=null,filter='active',sou
 }
 function matterCard(i,owners){
   const editable=['CANDIDATE','OPEN'].includes(i.status),active=i.status==='OPEN';
+  const q=i.quality||{};
   return `<article class="admission-section matter-card" data-patient-matter="${i.id}"><div class="matter-card-heading"><b>${html(i.title)}</b> <span class="tag ${i.status==='CANDIDATE'?'orange':active?'blue':'green'}">事项：${html(matterStates[i.status])}</span></div>
+    <p class="section-note" data-matter-next-step="${i.id}">下一步：${html(i.status==='CANDIDATE'?'核对原文与候选安排':active?matterNextStep(i.progress||{}):'查看处理记录')}</p>
     <p class="section-note">${html(matterKinds[i.kind])} · 负责人：${html(i.assigned_doctor_name||'待确认')} · 计划时间：${html(i.due_at?localTime(i.due_at):'待安排')}</p>
+    ${i.status==='CANDIDATE'&&q.admission==='CLARIFY'?'<p class="tag orange">需补充信息 · 展开“核对并确认事项”后填写</p>':''}
+    ${i.status==='CANDIDATE'&&q.admission==='SKIP'?'<p class="tag orange">不符合提取准入要求，请核对后忽略</p>':''}
+    ${i.status==='CANDIDATE'&&q.duplicates?.length?'<p class="tag orange">可能重复 · 确认前需核对已有安排</p>':''}
+    ${q.linked_matter_id?`<p>已关联原事项 #${q.linked_matter_id}，未新增正式待办。</p>`:''}
     ${i.source_changed?'<p class="tag orange">来源已修改；旧候选须重新识别。已确认事项保留原始依据，不自动改写。</p>':''}
     <div style="display:flex;align-items:center;justify-content:space-between;gap:12px"><span class="section-note">原文关键片段（含上下文）</span><button class="secondary" data-matter-source="${i.id}" onclick="openMatterSource(${i.id})">查看原文 ↗</button></div><blockquote class="record-text matter-quote">${matterQuoteContext(i)}</blockquote><p>来源：${html(i.source.label)} · ${html(localTime(i.source.at))}</p>
     ${active||i.progress?.actions?.length?`<div id="matterProgress-${i.id}">${matterProgressHtml(i)}</div>`:''}
     ${active?`<p><button class="primary matter-action" id="recordMatterCompletion-${i.id}" onclick="openMatterCompletion(${i.id})">记录完成情况</button></p>
       <section class="matter-completion" id="matterCompletion-${i.id}" hidden>
         <h4>记录实际完成情况</h4><p class="section-note">保存后，该事项将变为已完成并移出未完成待办。请记录实际执行结果；关联的其他事项不会自动完成。</p>
+        <div id="matterCompletionReview-${i.id}">${matterCompletionReviewHtml(i)}</div>
         <label for="matterCompletionNote-${i.id}">完成情况（必填）</label>
         <textarea id="matterCompletionNote-${i.id}" placeholder="请记录做了什么、执行结果及必要的后续交接。"></textarea>
         <p id="matterCompletionError-${i.id}" role="alert" style="color:#b42318"></p>
         <button class="primary matter-action" id="submitMatterCompletion-${i.id}" onclick="reviewPatientMatter(${i.id},'COMPLETE')">保存并完成事项</button>
         <button class="secondary matter-action" onclick="document.getElementById('matterCompletion-${i.id}').hidden=true">暂不完成</button>
       </section>`:''}
+    ${matterWorkflowDetails(i)}
     ${i.parent_id?`<p>前序事项 M#${i.parent_id} · 本项由医生批准创建</p>`:''}
     ${i.children?.length?`<p>后续事项：${i.children.map(c=>'M#'+c.id+' '+html(c.title)+' · '+html(matterStates[c.status])).join('；')}</p>`:''}
     <details class="matter-editor"><summary>${i.status==='CANDIDATE'?'核对并确认事项':active?'修改安排／记录完成':'查看处理记录'}</summary>
     <p><label>事项 <input id="matterTitle-${i.id}" value="${html(i.title)}" ${editable?'':'readonly'} /></label></p>
+    ${matterQualityEditor(i)}
+    ${q.evidence_kind&&q.evidence_kind!=='UNSPECIFIED'?`<p class="section-note">后续核对：${html(matterEvidenceKinds[q.evidence_kind])}。找到相关资料不等于医生已处理完成。</p>`:''}
     ${i.due_text?`<p>原文时间：${html(i.due_text)}，具体时间由医生安排。</p>`:''}
     ${editable?`<label>负责人 <select id="matterOwner-${i.id}">${owners.map(o=>`<option value="${o.id}" ${o.id===(i.assigned_doctor_id||1)?'selected':''}>${html(o.name)}</option>`).join('')}</select></label>
       <label>计划时间 <input type="datetime-local" id="matterDue-${i.id}" value="${matterLocalInput(i.due_at)}" /></label>
       <p><label>备注／实际完成情况 <input id="matterNote-${i.id}" placeholder="忽略、取消或完成时必填" /></label></p>
       ${active?`<button class="secondary matter-action" onclick="reviewPatientMatter(${i.id},'UPDATE')">保存安排</button> <button class="secondary matter-action" onclick="reviewPatientMatter(${i.id},'CANCEL')">取消事项</button>`:
-      `<button class="primary matter-action" ${i.source_changed?'disabled':''} onclick="reviewPatientMatter(${i.id},'CONFIRM')">确认纳入跟进</button> <button class="secondary matter-action" onclick="reviewPatientMatter(${i.id},'DISMISS')">填写原因并忽略</button>`}`:
+      `<button class="primary matter-action" ${i.source_changed||q.admission==='SKIP'?'disabled':''} onclick="reviewPatientMatter(${i.id},'CONFIRM')">确认核对结果</button> <button class="secondary matter-action" onclick="reviewPatientMatter(${i.id},'DISMISS')">填写原因并忽略</button>`}`:
       `<p>负责人：${html(i.assigned_doctor_name||'未指派')} · 计划时间：${html(i.due_at?localTime(i.due_at):'待安排')}</p><p class="record-text">处理记录：${html(i.resolution||'无')}</p><p class="section-note">记录时间：${html(localTime(i.updated_at))}</p>`}
     </details><p id="matterItemError-${i.id}" role="alert" style="color:#b42318"></p></article>`;
 }
@@ -96,8 +119,8 @@ function openMatterCompletion(id){
   document.getElementById('matterCompletionError-'+id).textContent='';
   section.scrollIntoView({block:'center'});field.focus({preventScroll:true});
 }
-async function openMatterSource(id){
-  const view=matterView,item=view?.data.items.find(i=>i.id===id);
+async function openMatterSource(id,sourceOverride=null){
+  const view=matterView,original=view?.data.items.find(i=>i.id===id),item=sourceOverride&&original?{...original,source:sourceOverride.source,quote:sourceOverride.quote,source_changed:false}:original;
   if(!item||matterBusy||matterActionBusy)return;
   const edits=captureMatterInputs(view.box),scroll=document.getElementById('panelBody').scrollTop;
   let target;
@@ -168,6 +191,20 @@ async function reviewPatientMatter(id,action){
   const completion=document.getElementById('matterCompletion-'+id),completionField=document.getElementById('matterCompletionNote-'+id);
   const field=action==='COMPLETE'&&completion&&!completion.hidden?completionField:document.getElementById('matterNote-'+id);
   const note=field?.value||'',error=document.getElementById(action==='COMPLETE'?'matterCompletionError-'+id:'matterItemError-'+id)||document.getElementById('matterError');
+  const duplicateDecision=document.getElementById('qualityDuplicateDecision-'+id)?.value||null;
+  const duplicateId=Number(document.getElementById('qualityDuplicateTarget-'+id)?.value)||null;
+  const duplicate=(item.quality?.duplicates||[]).find(d=>d.id===duplicateId);
+  const qualityPayload={action_text:document.getElementById('qualityAction-'+id)?.value||null,
+    target_text:document.getElementById('qualityTarget-'+id)?.value||null,
+    evidence_kind:document.getElementById('qualityEvidence-'+id)?.value||null,
+    clarification_note:document.getElementById('qualityNote-'+id)?.value||'',
+    duplicate_decision:duplicateDecision,duplicate_matter_id:duplicateId,duplicate_expected_version:duplicate?.version||null};
+  if(action==='CONFIRM'){
+    let message='';
+    if(item.quality?.duplicates?.length&&(!duplicateDecision||!note.trim()))message='请先选择重复处理方式，并在备注填写核对理由。';
+    else if(item.quality?.admission==='CLARIFY'&&duplicateDecision!=='LINK'&&(!qualityPayload.action_text?.trim()||!qualityPayload.target_text?.trim()||!qualityPayload.evidence_kind||!qualityPayload.clarification_note.trim()))message='请补充具体动作、对象、核对资料类型和实际安排说明。';
+    if(message){error.textContent=message;document.querySelector('[data-patient-matter="'+id+'"] .matter-editor').open=true;error.scrollIntoView({block:'center'});return;}
+  }
   if(['DISMISS','CANCEL','COMPLETE'].includes(action)&&!note.trim()){
     if(action==='COMPLETE')openMatterCompletion(id);
     error.textContent=action==='COMPLETE'?'请填写实际完成情况，再保存并完成事项。':action==='CANCEL'?'请填写取消原因。':'请填写忽略原因。';
@@ -181,10 +218,10 @@ async function reviewPatientMatter(id,action){
   try{
     await postWorkflow(`/agent/matters/${id}/review`,{doctor_id:1,expected_version:item.version,action,
       title:document.getElementById('matterTitle-'+id)?.value,assigned_doctor_id:Number(document.getElementById('matterOwner-'+id)?.value)||null,
-      due_at:due?new Date(due).toISOString():null,note});
+      due_at:due?new Date(due).toISOString():null,note,reviewed_result_id:action==='COMPLETE'&&document.getElementById('matterReviewedResult-'+id)?.checked?Number(document.getElementById('matterReviewedResult-'+id).dataset.resultId):null,...(action==='CONFIRM'?qualityPayload:{})});
     saved=true;
     if(view.box===document.getElementById('patientMatterView')){
-      await openPatientMatters(view.patientId,view.encounterId,action==='COMPLETE'?'all':view.filter,view.sourceKey);
+      await openPatientMatters(view.patientId,view.encounterId,action==='COMPLETE'||duplicateDecision==='LINK'?'all':view.filter,view.sourceKey);
       if(matterView?.box===document.getElementById('patientMatterView')){
         restoreMatterInputs(matterView.box,preserved,preserved.filter(v=>v.id.endsWith('-'+id)||v.id==='matterFilter').map(v=>v.id));
         if(action==='COMPLETE'){
@@ -193,7 +230,7 @@ async function reviewPatientMatter(id,action){
         }
       }
     }
-    await refreshDashboardTotals();showToast(action==='COMPLETE'?'完成情况已保存，事项已完成并移出未完成待办':'事项已保存，原文依据和处理历史保留');
+    await refreshDashboardTotals();showToast(action==='COMPLETE'?'完成情况已保存，事项已完成并移出未完成待办':action==='CONFIRM'&&duplicateDecision==='LINK'?'已关联已有事项，未新增待办；原事项未改变':'事项已保存，原文依据和处理历史保留');
   }catch(exc){
     if(saved)showToast('事项已保存，页面刷新失败，请刷新查看已保存结果');
     else if(view.box===document.getElementById('patientMatterView')){error.textContent='保存失败：'+exc.message+'。填写内容已保留。';error.scrollIntoView({block:'center'});}

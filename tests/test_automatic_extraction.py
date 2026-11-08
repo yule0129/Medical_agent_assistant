@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
 from test_rounding_workflow import client
-from test_patient_matters import model,TEXT
+from test_patient_matters import model,TEXT,TestMatterModel
 from test_bedside_rounding import setup_time,payload
 from agent.patient_memory import automatic,service
 from agent.patient_memory.models import MatterScan
@@ -113,10 +113,10 @@ def test_automatic_migration_preserves_existing_scan_and_is_repeatable():
 
 def test_duplicate_model_items_do_not_fail_the_entire_automatic_scan(client,model,monkeypatch):
     http,engine=client;save_interview(http)
-    class Duplicate:
+    class Duplicate(TestMatterModel):
         model='duplicate-test'
         def extract(self,source,known):
-            item=dict(kind='RECHECK',title='复查血常规',quote='明天复查血常规。',due_text='明天')
+            item=dict(kind='RECHECK',title='复查血常规',quote='明天复查血常规。',due_text='明天',classification='ACTIONABLE',action_text='复查',target_text='血常规',evidence_kind='LAB_REPORT')
             return {'items':[item,item]}
     monkeypatch.setattr(service,'get_provider',lambda:Duplicate())
     assert run(engine)['candidate_count']==1
@@ -127,5 +127,5 @@ def test_interrupted_extraction_resumes_without_unlimited_attempts(client,model)
     http,engine=client;save_interview(http)
     with Session(engine) as db:
         scan=db.scalar(select(MatterScan));scan.status='RUNNING';scan.attempt=1
-        scan.created_at=datetime.now(timezone.utc)-timedelta(seconds=121);db.commit()
+        scan.created_at=datetime.now(timezone.utc)-timedelta(seconds=181);db.commit()
     assert run(engine)['status']=='READY' and model.calls==1

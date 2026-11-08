@@ -80,3 +80,8 @@ DeepSeek 配置、/api/agent 接口、前端操作与隔离在线验收见 [Agen
 患者事项第三层当前需迁移到0011_matter_actions并重启API和进展Worker。支持来源受控的行动候选、医生审核执行、父子事项与交接快照；完整使用说明见根README。
 
 自动提取更新（2026-11-02）：迁移到`0012_auto_matter_extraction`并重启API及事项Worker。入院问诊保存和查房完成会持久化排队，模型执行在后台；`/api/agent/matter-progress-feedback`增加`extractions`和`candidate_count`，显示排队、候选、空结果及失败。
+
+提取质量更新（2026-11-03）：迁移至`0013_extraction_quality`并重启API和事项Worker。事项接口增加quality；确认接口增加医生补充和重复核对字段，版本化关联只关闭重复候选、不改原事项。
+
+
+患者连续跟进新增`GET /api/agent/matters/{id}/timeline`及`POST /api/agent/matters/{id}/quality-feedback`。事项列表包含患者工作摘要和完成条件，跟进反馈包含按住院分组的动态摘要；完成当前已返回报告相关事项时须审阅报告并记录结论。复用现有审计表，无新迁移，最新仍为0013；更新后重启API及事项Worker。完整操作与合成评测命令见根README。

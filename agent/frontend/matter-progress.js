@@ -14,10 +14,11 @@ function matterProgressHtml(item){
   const valid=p.status==='SUCCEEDED'&&!p.stale&&!closed;
   const pending=(p.actions||[]).filter(a=>a.status==='PROPOSED'&&!a.stale).length;
   return `<details class="matter-progress-details" data-matter-section="progress" data-progress-state="${html(p.state||p.status)}"><summary>Agent进展：${html(closed?'历史反馈':valid?progressStates[p.state]:progressJobs[p.status]||p.status)}${pending?` <span class="tag orange">${pending} 条建议待处理</span>`:''}</summary>
+    ${valid?`<p class="section-note">下一步：${html(matterNextStep(p))}</p>`:''}
     ${p.summary?`<p>${html(p.summary)}</p>`:''}
     ${p.stale?'<p>以上是旧资料下的历史判断，不能用于确认当前进展。</p>':''}
     ${p.error_code?`<p>错误：${html(p.error_code)}${p.retry_at?' · 将延迟重试':''}</p>`:''}
-    ${(p.evidence||[]).map(e=>`<details><summary>${html(e.label)} · 版本 ${e.version} · ${html(localTime(e.at))}</summary><blockquote class="record-text">${html(e.quote)}</blockquote></details>`).join('')}
+    ${(p.evidence||[]).map((e,index)=>`<details><summary>${html(e.label)} · 版本 ${e.version} · ${html(localTime(e.at))}</summary><blockquote class="record-text">${html(e.quote)}</blockquote><button class="secondary" onclick="openMatterEvidence(${id},${index})">查看证据原文 ↗</button></details>`).join('')}
     ${p.coverage?`<p class="section-note">${html(p.coverage.scope)}${p.coverage.complete?'':'；资料有截断，须人工核对覆盖范围'}</p>`:''}
     <p class="section-note">此处为资料进展反馈，已阅不会完成事项。执行结论、取消或修改计划仍由医生明确记录。</p>
     ${valid&&!p.acknowledged?`<button class="secondary" onclick="ackMatterProgress(${id},${version},${p.result_id})">标记已阅</button>`:p.acknowledged?'<span class="tag green">医生已阅</span>':''}
@@ -32,11 +33,13 @@ async function refreshMatterProgress(){
   try{
     const data=await workflowFetch('/agent/matter-progress-feedback?doctor_id=1');matterProgressFeed=data;
     const extractions=data.extractions||[];
+    refreshMatterWorkSummary(data);
     document.querySelectorAll('[data-extraction-encounter]').forEach(box=>{
       const rows=extractions.filter(s=>s.encounter_id===Number(box.dataset.extractionEncounter));
       box.innerHTML=rows.slice(0,5).map(extractionCard).join('')||'<p class="section-note">保存入院问诊或完成查房后，Agent会自动提取候选事项。</p>';
     });
     for(const item of data.items){
+      const stored=matterView?.data.items.find(i=>i.id===item.matter_id);if(stored){stored.progress=item.progress;syncMatterWorkflow(item);}
       const box=document.getElementById('matterProgress-'+item.matter_id);
       if(box){const signature=JSON.stringify(item.progress);if(box.dataset.signature!==signature){const inputs=captureMatterInputs(box),opened=[...box.querySelectorAll('details[data-matter-section][open]')].map(e=>e.dataset.matterSection);box.innerHTML=matterProgressHtml(item);restoreMatterInputs(box,inputs);for(const e of box.querySelectorAll('details[data-matter-section]'))e.open=opened.includes(e.dataset.matterSection);box.dataset.signature=signature;}}
     }
